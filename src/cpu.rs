@@ -1,4 +1,5 @@
-const MEM_SIZE: usize = 64 * 1024;
+use super::mem;
+
 const BOOT_PC_ADDR: u16 = 0xFFFE;
 const STACK_ADDR_BASE: u16 = 0x01FF;
 const STACK_ADDR_LIMIT: u16 = 0x0100;
@@ -53,7 +54,7 @@ struct Regs {
 
 pub struct Cpu {
     regs: Regs,
-    mem: [u8; MEM_SIZE],
+    clk_count: u64,
 }
 
 impl Cpu {
@@ -70,7 +71,7 @@ impl Cpu {
                 PC: BOOT_PC_ADDR,
                 SR: 0,
             },
-            mem: [0; MEM_SIZE],
+            clk_count: 0
         }
     }
 
@@ -229,13 +230,13 @@ impl Cpu {
             0xE8 => self.op_inc(AddrMode::Impl, RegMod::X),
             0xC8 => self.op_inc(AddrMode::Impl, RegMod::Y),            
 
-            // ASL 
+            // ASL
             0x0A => self.op_shift(AddrMode::Impl, true),
             0x06 => self.op_shift(AddrMode::ZP, true),
             0x16 => self.op_shift(AddrMode::ZPX, true),
             0x0E => self.op_shift(AddrMode::Abs, true),
             0x1E => self.op_shift(AddrMode::AbsX, true),
-            
+
             // ROL
             0x2A => self.op_rot(AddrMode::Impl, true),
             0x26 => self.op_rot(AddrMode::ZP, true),
@@ -415,6 +416,7 @@ mod tests {
     #[test]
     fn load_tests() {
         let mut cpu = Cpu::new();
-        
+
+
     }
 }
