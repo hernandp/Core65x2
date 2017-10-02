@@ -15,7 +15,7 @@ const FLAG_BRK: u8 = 0b0001_0000;
 const FLAG_OF: u8 = 0b0100_0000;
 const FLAG_SIGN: u8 = 0b1000_0000;
 
-// 
+//
 // Instruction operands
 //
 type Operands = (u8, Option<u8>);
@@ -25,16 +25,16 @@ type Operands = (u8, Option<u8>);
 //
 enum AddrMode {
     Impl,
-    Imm,    // #$00
-    ZP,     // $00
-    ZPX,    // $00,X
-    ZPY,    // $00,Y
-    ZPIndX, // ($00,X)
-    ZPIndY, // ($00),Y
-    Abs,    // $0000
-    AbsX,   // $0000,X
-    AbsY,   // $0000,Y
-    Ind,    // ($0000)
+    Imm,    // LDA #$22   Immediate
+    ZP,     // LDY $02      Zero-page
+    ZPX,    // LDA $00,X    Zero-page indexed (X)
+    ZPY,    // LDA $00,Y    Zero-page indexed (Y)
+    ZPIndX, // ($00,X)      Zero-page indexed indirect X
+    ZPIndY, // ($00),Y      Zero-page indexed indirect Y
+    Abs,    // LDX $0000    Absolute
+    AbsX,   // ADC $C000,X  Absolute indexed with X
+    AbsY,   // INC $F000,Y  Absolute indexed with Y 
+    Ind,    // ($0000)      Indirect
     Rel,    // PC + $00
 }
 
@@ -87,9 +87,7 @@ impl<'a> Cpu<'a> {
     // Returns elapsed clock cycles.
     //
     pub fn exec(&mut self) -> u64 {
-
         match self.fetch_instr() {
-
             /* Move instructions */
 
             // LDA
@@ -326,7 +324,6 @@ impl<'a> Cpu<'a> {
     // Fetch operands, updating program counter
     //
     fn fetch_op(&mut self, addr_mode: AddrMode) -> Option<Operands> {
-
         let mut operands: Option<Operands>;
         match addr_mode {
             AddrMode::Imm |
@@ -336,13 +333,14 @@ impl<'a> Cpu<'a> {
             AddrMode::ZPIndX |
             AddrMode::ZPIndY |
             AddrMode::Rel => {
-                operands = Some( (self.mem.read_byte(self.regs.PC), None) );
+                operands = Some((self.mem.read_byte(self.regs.PC), None));
                 self.regs.PC += 1;
             }
             AddrMode::Abs | AddrMode::AbsX | AddrMode::AbsY | AddrMode::Ind => {
                 operands = Some((
                     self.mem.read_byte(self.regs.PC),
-                    Some(self.mem.read_byte(self.regs.PC + 1))));
+                    Some(self.mem.read_byte(self.regs.PC + 1)),
+                ));
                 self.regs.PC += 2;
             }
             _ => {
@@ -352,15 +350,86 @@ impl<'a> Cpu<'a> {
         operands
     }
 
+    fn write_register(&mut self, dst_reg: RegMod, v: u8) {
+        match dst_reg {
+            RegMod::A => self.regs.A = v,
+            RegMod::X => self.regs.X = v,
+            RegMod::Y => self.regs.Y = v,
+            RegMod::SR=> self.regs.SR = v,
+            RegMod::SP=> self.regs.SP = v
+        }; 
+    }
+
+    fn set_s_flag(&mut self, v: u8){
+        if v >= 0x80 {
+            self.regs.SR |= FLAG_SIGN;
+        }
+        else {
+            self.regs.SR &= !FLAG_SIGN;
+        }
+    }
+
+    fn set_n_flag(&mut self, v: u8) {
+        if v == 0 {
+            self.regs.SR |= FLAG_ZERO;
+        } else {
+            self.regs.SR &= !FLAG_ZERO;
+        }
+    }
+
+    fn addr_from_2b(&self, b0: u8, b1: u8) -> u16 {
+        ((b1 as u16) << 8) & (b0 as u16)
+    }
+
     //
     // Opcode implementations
     //
 
     fn op_load(&mut self, addr_mode: AddrMode, src_reg: RegMod) -> u64 {
-        // match addr_mode {
-        //     Imm => self.regs.A =
-        // }
-        0
+        let ops = self.fetch_op(addr_mode);
+        match addr_mode {
+            AddrMode::Imm => {
+                let v = ops.unwrap().0;
+                self.set_s_flag(v);
+                self.set_n_flag(v);
+                self.write_register(src_reg, v);
+                2
+            },
+            AddrMode::ZP => {
+                let v = self.mem.read_byte(ops.unwrap().0 as u16);
+                self.set_s_flag(v);
+                self.set_n_flag(v);
+                self.write_register(src_reg, v);
+                3
+            },
+            AddrMode::ZPX => {
+                let v = self.mem.read_byte((ops.unwrap().0 + self.regs.X) as u16);
+                self.set_s_flag(v);
+                self.set_n_flag(v);
+                self.write_register(src_reg, v);
+                3
+            },
+            AddrMode::Abs => {
+                let v = self.mem.read_byte(self.addr_from_2b(ops.unwrap().0, ops.unwrap().1.unwrap()));
+                self.set_s_flag(v);
+                self.set_n_flag(v);
+                self.write_register(src_reg, v);
+                3
+            },
+            AddrMode::AbsX => {
+
+            },
+            AddrMode::AbsY => {
+
+            },
+            AddrMode::ZPIndX => {
+
+            },
+            AddrMode::ZPIndY => {
+
+            },
+            _ => { panic!("unsupported_addr_mode"); }
+        }
     }
 
     fn op_store(&mut self, addr_mode: AddrMode, dst_reg: RegMod) -> u64 {
