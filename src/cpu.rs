@@ -59,7 +59,7 @@ struct Regs {
 
 pub struct Cpu<'a> {
     regs: Regs,
-    mem: Option<&'a mut Memory>,
+    mem: &'a mut Memory,
     clk_count: u64,
 }
 
@@ -67,7 +67,7 @@ impl<'a> Cpu<'a> {
     //
     // Initialize processor
     //
-    pub fn new() -> Cpu<'a> {
+    pub fn new(sysmem: &'a mut Memory) -> Cpu<'a> {
         Cpu {
             regs: Regs {
                 A: 0,
@@ -78,12 +78,8 @@ impl<'a> Cpu<'a> {
                 SR: 0,
             },
             clk_count: 0,
-            mem: None,
+            mem: sysmem,
         }
-    }
-
-    pub fn connect_memory(&mut self, memobj: &'a mut Memory) {
-        self.mem = Some(memobj);
     }
 
     //
@@ -91,7 +87,6 @@ impl<'a> Cpu<'a> {
     // Returns elapsed clock cycles.
     //
     pub fn exec(&mut self) -> u64 {
-        assert_eq!(self.mem.is_some(), true);
 
         match self.fetch_instr() {
 
@@ -322,7 +317,7 @@ impl<'a> Cpu<'a> {
     // Fetch instruction, and updates program counter
     //
     fn fetch_instr(&mut self) -> u8 {
-        let opcode = self.mem.as_ref().unwrap().read_byte(self.regs.PC);
+        let opcode = self.mem.read_byte(self.regs.PC);
         self.regs.PC = self.regs.PC + 1;
         opcode
     }
@@ -331,7 +326,6 @@ impl<'a> Cpu<'a> {
     // Fetch operands, updating program counter
     //
     fn fetch_op(&mut self, addr_mode: AddrMode) -> Option<Operands> {
-        let mut mem = self.mem.as_ref().unwrap();
 
         let mut operands: Option<Operands>;
         match addr_mode {
@@ -342,13 +336,13 @@ impl<'a> Cpu<'a> {
             AddrMode::ZPIndX |
             AddrMode::ZPIndY |
             AddrMode::Rel => {
-                operands = Some( (mem.read_byte(self.regs.PC), None) );
+                operands = Some( (self.mem.read_byte(self.regs.PC), None) );
                 self.regs.PC += 1;
             }
             AddrMode::Abs | AddrMode::AbsX | AddrMode::AbsY | AddrMode::Ind => {
                 operands = Some((
-                    mem.read_byte(self.regs.PC),
-                    Some(mem.read_byte(self.regs.PC + 1))));
+                    self.mem.read_byte(self.regs.PC),
+                    Some(self.mem.read_byte(self.regs.PC + 1))));
                 self.regs.PC += 2;
             }
             _ => {
