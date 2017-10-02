@@ -1,15 +1,25 @@
 // Our machine constants
 //
-const MACHINE_MEMORY_SIZE: u32 = 64 * 1024;
+use mem::Memory;
+use cpu::Cpu;
 
-pub struct Machine {
-    cpu: Cpu,
-    mem: Memory,
+pub struct Machine<'a> {
+    ram: Memory,
+    cpu: Cpu<'a>,
     // MMU?
     // Sound?
     // VIC?
 }
 
-impl Machine {
-    
+impl<'a> Machine<'a> {
+    pub fn new() -> Machine<'a> {
+        Machine {
+            ram: Memory::new(),
+            cpu: Cpu::new()
+        }
+    }
+
+    pub fn boot(&mut self) {
+        self.cpu.exec();
+    }
 }

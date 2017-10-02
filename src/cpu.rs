@@ -1,4 +1,4 @@
-use super::mem;
+use mem::Memory;
 
 const BOOT_PC_ADDR: u16 = 0xFFFE;
 const STACK_ADDR_BASE: u16 = 0x01FF;
@@ -15,22 +15,27 @@ const FLAG_BRK: u8 = 0b0001_0000;
 const FLAG_OF: u8 = 0b0100_0000;
 const FLAG_SIGN: u8 = 0b1000_0000;
 
+// 
+// Instruction operands
+//
+type Operands = (u8, Option<u8>);
+
 //
 // Addressing mode modifier for opcodes
 //
 enum AddrMode {
     Impl,
-    Imm, // #$00
-    ZP, // $00
-    ZPX, // $00,X
-    ZPY, // $00,Y
+    Imm,    // #$00
+    ZP,     // $00
+    ZPX,    // $00,X
+    ZPY,    // $00,Y
     ZPIndX, // ($00,X)
     ZPIndY, // ($00),Y
-    Abs, // $0000
-    AbsX, // $0000,X
-    AbsY, // $0000,Y
-    Ind, // ($0000)
-    Rel, // PC + $00
+    Abs,    // $0000
+    AbsX,   // $0000,X
+    AbsY,   // $0000,Y
+    Ind,    // ($0000)
+    Rel,    // PC + $00
 }
 
 // Register modifier for opcodes
@@ -52,16 +57,17 @@ struct Regs {
     SR: u8,
 }
 
-pub struct Cpu {
+pub struct Cpu<'a> {
     regs: Regs,
+    mem: Option<&'a mut Memory>,
     clk_count: u64,
 }
 
-impl Cpu {
+impl<'a> Cpu<'a> {
     //
     // Initialize processor
     //
-    pub fn new() -> Cpu {
+    pub fn new() -> Cpu<'a> {
         Cpu {
             regs: Regs {
                 A: 0,
@@ -71,16 +77,24 @@ impl Cpu {
                 PC: BOOT_PC_ADDR,
                 SR: 0,
             },
-            clk_count: 0
+            clk_count: 0,
+            mem: None,
         }
+    }
+
+    pub fn connect_memory(&mut self, memobj: &'a mut Memory) {
+        self.mem = Some(memobj);
     }
 
     //
     // Execute instruction at current program counter.
     // Returns elapsed clock cycles.
     //
-    pub fn exec(&mut self) -> u32 {
-        match self.regs.PC {
+    pub fn exec(&mut self) -> u64 {
+        assert_eq!(self.mem.is_some(), true);
+
+        match self.fetch_instr() {
+
             /* Move instructions */
 
             // LDA
@@ -218,7 +232,7 @@ impl Cpu {
 
             // DEX/DEY
             0xCA => self.op_dec(AddrMode::Impl, RegMod::X),
-            0x88 => self.op_dec(AddrMode::Impl, RegMod::Y),            
+            0x88 => self.op_dec(AddrMode::Impl, RegMod::Y),
 
             // INC
             0xE6 => self.op_inc(AddrMode::ZP, RegMod::A),
@@ -228,7 +242,7 @@ impl Cpu {
 
             // INX/INY
             0xE8 => self.op_inc(AddrMode::Impl, RegMod::X),
-            0xC8 => self.op_inc(AddrMode::Impl, RegMod::Y),            
+            0xC8 => self.op_inc(AddrMode::Impl, RegMod::Y),
 
             // ASL
             0x0A => self.op_shift(AddrMode::Impl, true),
@@ -249,7 +263,7 @@ impl Cpu {
             0x46 => self.op_shift(AddrMode::ZP, false),
             0x56 => self.op_shift(AddrMode::ZPX, false),
             0x4E => self.op_shift(AddrMode::Abs, false),
-            0x5E => self.op_shift(AddrMode::AbsX, false),            
+            0x5E => self.op_shift(AddrMode::AbsX, false),
 
             // ROR
             0x6A => self.op_rot(AddrMode::Impl, false),
@@ -305,106 +319,149 @@ impl Cpu {
     }
 
     //
+    // Fetch instruction, and updates program counter
+    //
+    fn fetch_instr(&mut self) -> u8 {
+        let opcode = self.mem.as_ref().unwrap().read_byte(self.regs.PC);
+        self.regs.PC = self.regs.PC + 1;
+        opcode
+    }
+
+    //
+    // Fetch operands, updating program counter
+    //
+    fn fetch_op(&mut self, addr_mode: AddrMode) -> Option<Operands> {
+        let mut mem = self.mem.as_ref().unwrap();
+
+        let mut operands: Option<Operands>;
+        match addr_mode {
+            AddrMode::Imm |
+            AddrMode::ZP |
+            AddrMode::ZPX |
+            AddrMode::ZPY |
+            AddrMode::ZPIndX |
+            AddrMode::ZPIndY |
+            AddrMode::Rel => {
+                operands = Some( (mem.read_byte(self.regs.PC), None) );
+                self.regs.PC += 1;
+            }
+            AddrMode::Abs | AddrMode::AbsX | AddrMode::AbsY | AddrMode::Ind => {
+                operands = Some((
+                    mem.read_byte(self.regs.PC),
+                    Some(mem.read_byte(self.regs.PC + 1))));
+                self.regs.PC += 2;
+            }
+            _ => {
+                operands = None;
+            }
+        }
+        operands
+    }
+
+    //
     // Opcode implementations
     //
 
-    fn op_load(&mut self, addr_mode: AddrMode, src_reg: RegMod) -> u32 {
+    fn op_load(&mut self, addr_mode: AddrMode, src_reg: RegMod) -> u64 {
+        // match addr_mode {
+        //     Imm => self.regs.A =
+        // }
         0
     }
 
-    fn op_store(&mut self, addr_mode: AddrMode, dst_reg: RegMod) -> u32 {
+    fn op_store(&mut self, addr_mode: AddrMode, dst_reg: RegMod) -> u64 {
         0
     }
 
-    fn op_tx(&mut self, src_reg: RegMod, dst_reg: RegMod) -> u32 {
+    fn op_tx(&mut self, src_reg: RegMod, dst_reg: RegMod) -> u64 {
         0
     }
 
-    fn op_or(&mut self, addr_mode: AddrMode) -> u32 {
+    fn op_or(&mut self, addr_mode: AddrMode) -> u64 {
         0
     }
 
-    fn op_and(&mut self, addr_mode: AddrMode) -> u32 {
+    fn op_and(&mut self, addr_mode: AddrMode) -> u64 {
         0
     }
 
-    fn op_xor(&mut self, addr_mode: AddrMode) -> u32 {
+    fn op_xor(&mut self, addr_mode: AddrMode) -> u64 {
         0
     }
 
-    fn op_adc(&mut self, addr_mode: AddrMode) -> u32 {
+    fn op_adc(&mut self, addr_mode: AddrMode) -> u64 {
         0
     }
 
-    fn op_sbc(&mut self, addr_mode: AddrMode) -> u32 {
+    fn op_sbc(&mut self, addr_mode: AddrMode) -> u64 {
         0
     }
 
-    fn op_cmp(&mut self, addr_mode: AddrMode, src_reg: RegMod) -> u32 {
+    fn op_cmp(&mut self, addr_mode: AddrMode, src_reg: RegMod) -> u64 {
         0
     }
 
-    fn op_dec(&mut self, addr_mode: AddrMode, dst_reg: RegMod) -> u32 {
+    fn op_dec(&mut self, addr_mode: AddrMode, dst_reg: RegMod) -> u64 {
         0
     }
 
-    fn op_inc(&mut self, addr_mode: AddrMode, dst_reg: RegMod) -> u32 {
+    fn op_inc(&mut self, addr_mode: AddrMode, dst_reg: RegMod) -> u64 {
         0
     }
 
-    fn op_shift(&mut self, addr_mode: AddrMode, left: bool) -> u32 {
+    fn op_shift(&mut self, addr_mode: AddrMode, left: bool) -> u64 {
         0
     }
 
-    fn op_rot(&mut self, addr_mode: AddrMode, left: bool) -> u32 {
+    fn op_rot(&mut self, addr_mode: AddrMode, left: bool) -> u64 {
         0
     }
 
-    fn op_pull(&mut self, dst_reg: RegMod) -> u32 {
+    fn op_pull(&mut self, dst_reg: RegMod) -> u64 {
         0
     }
 
-    fn op_push(&mut self, src_reg: RegMod) -> u32 {
+    fn op_push(&mut self, src_reg: RegMod) -> u64 {
         0
     }
 
-    fn op_jump(&mut self, test_flag: u8, branch_if: bool) -> u32 {
+    fn op_jump(&mut self, test_flag: u8, branch_if: bool) -> u64 {
         0
     }
 
-    fn op_brk(&mut self) -> u32 {
+    fn op_brk(&mut self) -> u64 {
         0
     }
 
-    fn op_rti(&mut self) -> u32 {
+    fn op_rti(&mut self) -> u64 {
         0
     }
 
-    fn op_jsr(&mut self) -> u32 {
+    fn op_jsr(&mut self) -> u64 {
         0
     }
 
-    fn op_rts(&mut self) -> u32 {
+    fn op_rts(&mut self) -> u64 {
         0
     }
 
-    fn op_jmp(&mut self, addrm: AddrMode) -> u32 {
+    fn op_jmp(&mut self, addrm: AddrMode) -> u64 {
         0
     }
 
-    fn op_bit(&mut self, addrm: AddrMode) -> u32 {
+    fn op_bit(&mut self, addrm: AddrMode) -> u64 {
         0
     }
 
-    fn op_setfl(&mut self, dst_flag: u8, f: bool) -> u32 {
+    fn op_setfl(&mut self, dst_flag: u8, f: bool) -> u64 {
         0
     }
 
-    fn op_nop(&mut self) -> u32 {
+    fn op_nop(&mut self) -> u64 {
         0
     }
 
-    fn op_hlt(&mut self) -> u32 {
+    fn op_hlt(&mut self) -> u64 {
         // Halt processor.
         0
     }
@@ -416,7 +473,5 @@ mod tests {
     #[test]
     fn load_tests() {
         let mut cpu = Cpu::new();
-
-
     }
 }

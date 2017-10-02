@@ -13,12 +13,12 @@ impl Memory {
         }
     }
 
-    pub fn read_byte(&self, addr: usize) -> u8 {
-        self.mem_array[addr]
+    pub fn read_byte(&self, addr: u16) -> u8 {
+        self.mem_array[addr as usize]
     }
 
-    pub fn write_byte(&mut self, addr: usize, v: u8) {
-        self.mem_array[addr] = v;
+    pub fn write_byte(&mut self, addr: u16, v: u8) {
+        self.mem_array[addr as usize] = v;
     }
 
 }

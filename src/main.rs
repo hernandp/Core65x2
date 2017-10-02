@@ -1,8 +1,9 @@
-mod mem;
+mod machine;
 mod cpu;
+mod mem;
 
 fn main() {
-    let mut my_cpu = cpu::Cpu::new();
-    my_cpu.exec();
+    let mut machine = machine::Machine ::new();
+    machine.boot();
     println!("Hello, world!");
 }
