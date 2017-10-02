@@ -33,7 +33,7 @@ enum AddrMode {
     ZPIndY, // ($00),Y      Zero-page indexed indirect Y
     Abs,    // LDX $0000    Absolute
     AbsX,   // ADC $C000,X  Absolute indexed with X
-    AbsY,   // INC $F000,Y  Absolute indexed with Y 
+    AbsY,   // INC $F000,Y  Absolute indexed with Y
     Ind,    // ($0000)      Indirect
     Rel,    // PC + $00
 }
@@ -323,9 +323,9 @@ impl<'a> Cpu<'a> {
     //
     // Fetch operands, updating program counter
     //
-    fn fetch_op(&mut self, addr_mode: AddrMode) -> Option<Operands> {
+    fn fetch_op(&mut self, addr_mode: &AddrMode) -> Option<Operands> {
         let mut operands: Option<Operands>;
-        match addr_mode {
+        match *addr_mode {
             AddrMode::Imm |
             AddrMode::ZP |
             AddrMode::ZPX |
@@ -350,30 +350,38 @@ impl<'a> Cpu<'a> {
         operands
     }
 
-    fn write_register(&mut self, dst_reg: RegMod, v: u8) {
-        match dst_reg {
+    fn write_register(&mut self, dst_reg: &RegMod, v: u8) {
+        match *dst_reg {
             RegMod::A => self.regs.A = v,
             RegMod::X => self.regs.X = v,
             RegMod::Y => self.regs.Y = v,
-            RegMod::SR=> self.regs.SR = v,
-            RegMod::SP=> self.regs.SP = v
-        }; 
+            RegMod::SR => self.regs.SR = v,
+            RegMod::SP => self.regs.SP = v,
+        };
     }
 
-    fn set_s_flag(&mut self, v: u8){
+    fn set_s_flag(&mut self, v: u8) {
         if v >= 0x80 {
             self.regs.SR |= FLAG_SIGN;
-        }
-        else {
+        } else {
             self.regs.SR &= !FLAG_SIGN;
         }
     }
 
-    fn set_n_flag(&mut self, v: u8) {
+    fn set_z_flag(&mut self, v: u8) {
         if v == 0 {
             self.regs.SR |= FLAG_ZERO;
         } else {
             self.regs.SR &= !FLAG_ZERO;
+        }
+    }
+
+    fn set_flags(&mut self, flags: u8, v: u8) {
+        if FLAG_ZERO == (flags & FLAG_ZERO) {
+            self.set_z_flag(v);
+        }
+        if FLAG_SIGN == (flags & FLAG_SIGN) {
+            self.set_s_flag(v);
         }
     }
 
@@ -386,49 +394,70 @@ impl<'a> Cpu<'a> {
     //
 
     fn op_load(&mut self, addr_mode: AddrMode, src_reg: RegMod) -> u64 {
-        let ops = self.fetch_op(addr_mode);
+        let ops = self.fetch_op(&addr_mode);
         match addr_mode {
             AddrMode::Imm => {
                 let v = ops.unwrap().0;
-                self.set_s_flag(v);
-                self.set_n_flag(v);
-                self.write_register(src_reg, v);
+                self.set_flags(FLAG_SIGN | FLAG_ZERO, v);
+                self.write_register(&src_reg, v);
                 2
-            },
+            }
             AddrMode::ZP => {
                 let v = self.mem.read_byte(ops.unwrap().0 as u16);
-                self.set_s_flag(v);
-                self.set_n_flag(v);
-                self.write_register(src_reg, v);
+                self.set_flags(FLAG_SIGN | FLAG_ZERO, v);
+                self.write_register(&src_reg, v);
                 3
-            },
+            }
             AddrMode::ZPX => {
                 let v = self.mem.read_byte((ops.unwrap().0 + self.regs.X) as u16);
-                self.set_s_flag(v);
-                self.set_n_flag(v);
-                self.write_register(src_reg, v);
-                3
-            },
+                self.set_flags(FLAG_SIGN | FLAG_ZERO, v);
+                self.write_register(&src_reg, v);
+                4
+            }
             AddrMode::Abs => {
-                let v = self.mem.read_byte(self.addr_from_2b(ops.unwrap().0, ops.unwrap().1.unwrap()));
-                self.set_s_flag(v);
-                self.set_n_flag(v);
-                self.write_register(src_reg, v);
-                3
-            },
+                let v = self.mem
+                    .read_byte(self.addr_from_2b(ops.unwrap().0, ops.unwrap().1.unwrap()));
+                self.set_flags(FLAG_SIGN | FLAG_ZERO, v);
+                self.write_register(&src_reg, v);
+                4
+            }
             AddrMode::AbsX => {
-
-            },
+                let src_addr: u16 = (self.regs.X as u16)
+                    + self.addr_from_2b(ops.unwrap().0, ops.unwrap().1.unwrap());
+                let v = self.mem.read_byte(src_addr);
+                self.set_flags(FLAG_SIGN | FLAG_ZERO, v);
+                self.write_register(&src_reg, v);
+                4
+            }
             AddrMode::AbsY => {
-
-            },
+                let src_addr: u16 = (self.regs.Y as u16)
+                    + self.addr_from_2b(ops.unwrap().0, ops.unwrap().1.unwrap());
+                let v = self.mem.read_byte(src_addr);
+                self.set_flags(FLAG_SIGN | FLAG_ZERO, v);
+                self.write_register(&src_reg, v);
+                4
+            }
             AddrMode::ZPIndX => {
-
-            },
+                let src_addr: u16 = self.addr_from_2b(
+                    self.regs.X + ops.unwrap().0,
+                    self.regs.X + 1 + ops.unwrap().0,
+                );
+                let v = self.mem.read_byte(src_addr);
+                self.set_flags(FLAG_SIGN | FLAG_ZERO, v);
+                self.write_register(&src_reg, v);
+                6
+            }
             AddrMode::ZPIndY => {
-
-            },
-            _ => { panic!("unsupported_addr_mode"); }
+                let src_addr: u16 =
+                    self.addr_from_2b(ops.unwrap().0, ops.unwrap().0 + 1) + self.regs.Y as u16;
+                 let v = self.mem.read_byte(src_addr);
+                self.set_flags(FLAG_SIGN | FLAG_ZERO, v);
+                self.write_register(&src_reg, v);
+                5
+            }
+            _ => {
+                panic!("unsupported_addr_mode");
+            }
         }
     }
 
