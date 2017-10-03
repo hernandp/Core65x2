@@ -74,7 +74,7 @@ impl<'a> Cpu<'a> {
                 X: 0,
                 Y: 0,
                 SP: 0,
-                PC: BOOT_PC_ADDR,
+                PC: 0,
                 SR: 0,
             },
             clk_count: 0,
@@ -87,7 +87,7 @@ impl<'a> Cpu<'a> {
     // Returns elapsed clock cycles.
     //
     pub fn exec(&mut self) -> u64 {
-        match self.fetch_instr() {
+        let clk = match self.fetch_instr() {
             /* Move instructions */
 
             // LDA
@@ -308,7 +308,10 @@ impl<'a> Cpu<'a> {
             0xEA => self.op_nop(),
 
             _ => self.op_hlt(),
-        }
+        };
+
+        self.clk_count += clk;
+        clk
     }
 
     //
@@ -450,7 +453,7 @@ impl<'a> Cpu<'a> {
             AddrMode::ZPIndY => {
                 let src_addr: u16 =
                     self.addr_from_2b(ops.unwrap().0, ops.unwrap().0 + 1) + self.regs.Y as u16;
-                 let v = self.mem.read_byte(src_addr);
+                let v = self.mem.read_byte(src_addr);
                 self.set_flags(FLAG_SIGN | FLAG_ZERO, v);
                 self.write_register(&src_reg, v);
                 5
@@ -562,8 +565,114 @@ impl<'a> Cpu<'a> {
 
 #[cfg(test)]
 mod tests {
+    use mem;
+    use cpu;
+
+    struct CpuState {
+        a: Option<u8>,
+        x: Option<u8>,
+        y: Option<u8>,
+        sr: Option<u8>,
+        pc: Option<u16>,
+        sp: Option<u8>,
+        clk: Option<u64>
+    }
+
+   
+    fn setup_mem(sys_mem: &mut mem::Memory) {
+
+        const TEST_BYTE: u8 = 0xFE;
+        const ZP_TEST_BYTE: u8 = 0x4E;
+       
+        sys_mem.write_byte(0xC000, TEST_BYTE);
+        sys_mem.write_byte(0xC280, TEST_BYTE);
+        sys_mem.write_byte(0xE020, TEST_BYTE);
+        sys_mem.write_byte(0x0010, ZP_TEST_BYTE);
+        sys_mem.write_byte(0x0080, ZP_TEST_BYTE);
+        sys_mem.write_byte(0x002C, ZP_TEST_BYTE);
+    }
+
+    fn assert_cpu_state(cpu: &cpu::Cpu, cpu_state: &CpuState) {
+        if cpu_state.a.is_some() {
+            assert_eq!(cpu.regs.A, cpu_state.a.unwrap());
+        }
+        if cpu_state.x.is_some() {
+            assert_eq!(cpu.regs.X, cpu_state.x.unwrap());
+        }
+        if cpu_state.y.is_some() {
+            assert_eq!(cpu.regs.Y, cpu_state.y.unwrap());
+        }
+        if cpu_state.sr.is_some() {
+            assert_eq!(cpu.regs.SR, cpu_state.sr.unwrap());
+        }
+        if cpu_state.sp.is_some() {
+            assert_eq!(cpu.regs.SP, cpu_state.sp.unwrap());
+        }
+        if cpu_state.pc.is_some() {
+            assert_eq!(cpu.regs.PC, cpu_state.pc.unwrap());
+        }
+        if cpu_state.clk.is_some() {
+            assert_eq!(cpu.clk_count, cpu_state.clk.unwrap());
+        }
+    }
+    
     #[test]
-    fn load_tests() {
-        let mut cpu = Cpu::new();
+    fn test_lda_ldx_ldy() { 
+         let mut sys_mem = mem::Memory::new();
+         setup_mem(&mut sys_mem);
+
+        /* Test:
+
+        A9 01     LDA #$01        ; Immediate
+        A5 80     LDA $80         ; ZP
+        B5 FF     LDA $FF,X       ; ZPX
+        AD 00 C0  LDA $c000       ; Abs
+        BD 78 C2  LDA $C278,X     ; Abs X
+        B9 16 E0  LDA $E016,Y     ; Abs Y
+        A1 10     LDA ($10,X)     ; Ind X
+        B1 2C     LDA ($2C),Y     ; Ind Y
+        */
+       
+        sys_mem.write_vec(0, &vec![0xA9, 0x01, 
+        0xA5, 0x80,
+        0xB5, 0xff, 
+        0xad, 0x00, 0xc0,
+        0xbd, 0x78, 0xC2, 
+        0xb9, 0x16, 0xe0,
+        0xa1, 0x10,
+        0xb1, 0x2c]);        
+
+        // LDA #$01
+        let mut sys_cpu = cpu::Cpu::new(&mut sys_mem);
+        sys_cpu.exec();
+        assert_cpu_state(&sys_cpu, &CpuState {
+             a: Some(0x01), x: None, y: None, sp:None,
+             pc: Some(0x0002), clk: Some(2), sr: Some(0)
+        });
+
+        // LDA $80
+        sys_cpu.exec();
+
+
+        // Zero-Page,X
+        // LDA $FF,X
+
+        // Absolute
+        // LDA $C000
+
+        // Absolute,X
+        // LDA $C278,X
+
+        // Absolute,Y
+        // LDA $E016,Y
+
+        // (Indirect,X)
+        // LDA ($10,X)
+
+        // (Indirect),Y
+        // LDA ($2C),Y
+
+
+        
     }
 }

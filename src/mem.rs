@@ -21,5 +21,13 @@ impl Memory {
         self.mem_array[addr as usize] = v;
     }
 
+    pub fn write_vec(&mut self, addr: u16, v: &Vec<u8>) {
+        let mut cur_addr = addr;
+        for byte in v {
+            self.mem_array[cur_addr as usize] = *byte;
+            cur_addr += 1;
+        }
+    }
+
 }
 
