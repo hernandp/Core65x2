@@ -1,3 +1,6 @@
+#[cfg(test)]
+mod tests;
+
 use super::mem::Memory;
 
 const BOOT_PC_ADDR: u16 = 0xFFFE;
@@ -563,5 +566,3 @@ impl<'a> Cpu<'a> {
         0
     }
 }
-
-mod tests;
