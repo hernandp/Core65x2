@@ -395,77 +395,59 @@ impl<'a> Cpu<'a> {
         ((b1 as u16) << 8) | (b0 as u16)
     }
 
+    fn calc_eff_addr(&self, addr_mode: &AddrMode, ops: &Operands) -> u16 {
+        match *addr_mode {
+            AddrMode::ZP => (*ops).0 as u16,
+            AddrMode::ZPX => (*ops).0.wrapping_add(self.regs.X) as u16,
+            AddrMode::ZPY => (*ops).0.wrapping_add(self.regs.Y) as u16,
+            AddrMode::Abs => self.addr_from_2b((*ops).0, (*ops).1.unwrap()),
+            AddrMode::AbsX => {
+                (self.regs.X as u16).wrapping_add(self.addr_from_2b((*ops).0, (*ops).1.unwrap()))
+            },
+            AddrMode::AbsY => {
+                (self.regs.Y as u16).wrapping_add(self.addr_from_2b((*ops).0, (*ops).1.unwrap()))
+            },
+            AddrMode::ZPIndX => self.addr_from_2b(
+                self.mem
+                    .read_byte(self.regs.X.wrapping_add((*ops).0) as u16),
+                self.mem
+                    .read_byte(self.regs.X.wrapping_add(1).wrapping_add((*ops).0) as u16),
+            ),
+            AddrMode::ZPIndY => self.addr_from_2b(
+                    self.mem.read_byte((*ops).0 as u16),
+                    self.mem.read_byte((*ops).0.wrapping_add(1) as u16),
+                ).wrapping_add(self.regs.Y as u16),
+                _ => panic!("Cannot calculate effective address for this addressing mode.")
+        }
+    }
+
     //
     // Opcode implementations
     //
 
     fn op_load(&mut self, addr_mode: AddrMode, src_reg: RegMod) -> u64 {
         let ops = self.fetch_op(&addr_mode);
+       
+        let v = match addr_mode {
+            AddrMode::Imm => ops.unwrap().0,
+            _=>
+            {
+                 let eff_addr = self.calc_eff_addr(&addr_mode, &ops.unwrap());
+                 self.mem.read_byte(eff_addr)
+            }
+        };
+
+        self.set_flags(FLAG_SIGN | FLAG_ZERO, v);
+        self.write_register(&src_reg, v);
+
         match addr_mode {
-            AddrMode::Imm => {
-                let v = ops.unwrap().0;
-                self.set_flags(FLAG_SIGN | FLAG_ZERO, v);
-                self.write_register(&src_reg, v);
-                2
-            }
-            AddrMode::ZP => {
-                let v = self.mem.read_byte(ops.unwrap().0 as u16);
-                self.set_flags(FLAG_SIGN | FLAG_ZERO, v);
-                self.write_register(&src_reg, v);
-                3
-            }
-            AddrMode::ZPX => {
-                let v = self.mem.read_byte((ops.unwrap().0.wrapping_add(self.regs.X)) as u16);
-                self.set_flags(FLAG_SIGN | FLAG_ZERO, v);
-                self.write_register(&src_reg, v);
-                4
-            }
-            AddrMode::Abs => {
-                let v = self.mem
-                    .read_byte(self.addr_from_2b(ops.unwrap().0, ops.unwrap().1.unwrap()));
-                self.set_flags(FLAG_SIGN | FLAG_ZERO, v);
-                self.write_register(&src_reg, v);
-                4
-            }
-            AddrMode::AbsX => {
-                let src_addr: u16 = (self.regs.X as u16)
-                    .wrapping_add(self.addr_from_2b(ops.unwrap().0, ops.unwrap().1.unwrap()));
-                let v = self.mem.read_byte(src_addr);
-                self.set_flags(FLAG_SIGN | FLAG_ZERO, v);
-                self.write_register(&src_reg, v);
-                4
-            }
-            AddrMode::AbsY => {
-                let src_addr: u16 = (self.regs.Y as u16)
-                    .wrapping_add(self.addr_from_2b(ops.unwrap().0, ops.unwrap().1.unwrap()));
-                let v = self.mem.read_byte(src_addr);
-                self.set_flags(FLAG_SIGN | FLAG_ZERO, v);
-                self.write_register(&src_reg, v);
-                4
-            }
-            AddrMode::ZPIndX => {
-                let src_addr: u16 = self.addr_from_2b(
-                    self.mem.read_byte(self.regs.X.wrapping_add(ops.unwrap().0) as u16),
-                    self.mem.read_byte(self.regs.X.wrapping_add(1).wrapping_add(ops.unwrap().0) as u16),
-                );
-                let v = self.mem.read_byte(src_addr);
-                self.set_flags(FLAG_SIGN | FLAG_ZERO, v);
-                self.write_register(&src_reg, v);
-                6
-            }
-            AddrMode::ZPIndY => {
-                let src_addr: u16 = self.addr_from_2b(
-                    self.mem.read_byte(ops.unwrap().0 as u16),
-                    self.mem.read_byte(ops.unwrap().0.wrapping_add(1) as u16))
-                    .wrapping_add(self.regs.Y as u16);
-                let v = self.mem.read_byte(src_addr);
-                self.set_flags(FLAG_SIGN | FLAG_ZERO, v);
-                self.write_register(&src_reg, v);
-                5
-            }
-            _ => {
-                panic!("unsupported_addr_mode");
-            }
+            AddrMode::Imm => 2,
+            AddrMode::ZP => 3,
+            AddrMode::ZPX | AddrMode::ZPY | AddrMode::Abs => 4,
+            AddrMode::AbsX | AddrMode::AbsY => 4,
+            AddrMode::ZPIndX => 6,
+            AddrMode::ZPIndY => 5,
+            _ => panic!("unsupported_addr_mode")
         }
     }
 
