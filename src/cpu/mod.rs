@@ -50,6 +50,19 @@ enum RegMod {
     SR,
 }
 
+// Instruction group for address calculation
+enum InstrGroup {
+    Read,
+    ReadWrite,
+    Write,
+}
+
+// Effective address: (address, clock count)
+struct EAResult {
+    addr: u16,
+    clk_count: u64,
+}
+
 // 6502 CPU registers
 struct Regs {
     A: u8,
@@ -395,30 +408,116 @@ impl<'a> Cpu<'a> {
         ((b1 as u16) << 8) | (b0 as u16)
     }
 
-    fn calc_eff_addr(&self, addr_mode: &AddrMode, ops: &Operands) -> u16 {
+    fn calc_eff_addr(&self, insgrp: &InstrGroup, addr_mode: &AddrMode, ops: &Operands) -> EAResult {
+        let mut res: EAResult;
+
         match *addr_mode {
-            AddrMode::ZP => (*ops).0 as u16,
-            AddrMode::ZPX => (*ops).0.wrapping_add(self.regs.X) as u16,
-            AddrMode::ZPY => (*ops).0.wrapping_add(self.regs.Y) as u16,
-            AddrMode::Abs => self.addr_from_2b((*ops).0, (*ops).1.unwrap()),
+            AddrMode::Imm | AddrMode::Impl => {
+                res.addr = 0; // this must be ignored by caller
+                res.clk_count = 2;
+            }
+            AddrMode::ZP => {
+                res.addr = (*ops).0 as u16;
+                res.clk_count = match *insgrp {
+                    InstrGroup::Read | InstrGroup::Write => 3,
+                    InstrGroup::ReadWrite => 5,
+                };
+            }
+            AddrMode::ZPX => {
+                res.addr = (*ops).0.wrapping_add(self.regs.X) as u16;
+                res.clk_count = match *insgrp {
+                    InstrGroup::Read | InstrGroup::Write => 4,
+                    InstrGroup::ReadWrite => 6,
+                }
+            }
+            AddrMode::ZPY => {
+                res.addr = (*ops).0.wrapping_add(self.regs.Y) as u16;
+                res.clk_count = match *insgrp {
+                    InstrGroup::Read | InstrGroup::Write => 4,
+                    InstrGroup::ReadWrite => 6,
+                }
+            }
+            AddrMode::Abs => {
+                res.addr = self.addr_from_2b((*ops).0, (*ops).1.unwrap());
+                res.clk_count = match *insgrp {
+                    InstrGroup::Read | InstrGroup::Write => 4,
+                    InstrGroup::ReadWrite => 6,
+                }
+            }
             AddrMode::AbsX => {
-                (self.regs.X as u16).wrapping_add(self.addr_from_2b((*ops).0, (*ops).1.unwrap()))
-            },
+                res.addr = (self.regs.X as u16)
+                    .wrapping_add(self.addr_from_2b((*ops).0, (*ops).1.unwrap()));
+                let mut page_cross_clk = 0;
+                if (self.regs.X).overflowing_add((*ops).0).1 {
+                    page_cross_clk = 1;
+                };
+                res.clk_count = match *insgrp {
+                    InstrGroup::Read => 4 + page_cross_clk,
+                    InstrGroup::Write => 5,
+                    InstrGroup::ReadWrite => 7,
+                };
+            }
             AddrMode::AbsY => {
-                (self.regs.Y as u16).wrapping_add(self.addr_from_2b((*ops).0, (*ops).1.unwrap()))
-            },
-            AddrMode::ZPIndX => self.addr_from_2b(
-                self.mem
-                    .read_byte(self.regs.X.wrapping_add((*ops).0) as u16),
-                self.mem
-                    .read_byte(self.regs.X.wrapping_add(1).wrapping_add((*ops).0) as u16),
-            ),
-            AddrMode::ZPIndY => self.addr_from_2b(
+                res.addr = (self.regs.Y as u16)
+                    .wrapping_add(self.addr_from_2b((*ops).0, (*ops).1.unwrap()));
+                let mut page_cross_clk = 0;
+                if (self.regs.Y).overflowing_add((*ops).0).1 {
+                    page_cross_clk = 1;
+                };
+                res.clk_count = match *insgrp {
+                    InstrGroup::Read => 4 + page_cross_clk,
+                    InstrGroup::Write => 5,
+                    InstrGroup::ReadWrite => 7,
+                };
+            }
+            AddrMode::ZPIndX => {
+                res.addr = self.addr_from_2b(
+                    self.mem
+                        .read_byte(self.regs.X.wrapping_add((*ops).0) as u16),
+                    self.mem
+                        .read_byte(self.regs.X.wrapping_add(1).wrapping_add((*ops).0) as u16),
+                );
+                res.clk_count = match *insgrp {
+                    InstrGroup::Read | InstrGroup::Write => 6,
+                    InstrGroup::ReadWrite => 8,
+                };
+            }
+            AddrMode::ZPIndY => {
+                let indirect_addr = self.addr_from_2b(
                     self.mem.read_byte((*ops).0 as u16),
                     self.mem.read_byte((*ops).0.wrapping_add(1) as u16),
-                ).wrapping_add(self.regs.Y as u16),
-                _ => panic!("Cannot calculate effective address for this addressing mode.")
-        }
+                );
+                res.addr = indirect_addr.wrapping_add(self.regs.Y as u16);
+
+                let mut page_cross_clk = 0;
+                if ((indirect_addr & 0xFF) as u8)
+                    .overflowing_add(self.regs.Y)
+                    .1
+                {
+                    page_cross_clk = 1;
+                }
+                res.clk_count = match *insgrp {
+                    InstrGroup::Read => 6 + page_cross_clk,
+                    InstrGroup::Write => 6,
+                    InstrGroup::ReadWrite => 8,
+                }
+            }
+            AddrMode::Ind => {
+                 let indirect_addr = self.addr_from_2b((*ops).0, (*ops).1.unwrap());
+                 res.addr = self.addr_from_2b(
+                     self.mem.read_byte(indirect_addr),
+                     self.mem.read_byte(indirect_addr.wrapping_add(1))
+                 );
+                 res.clk_count = 5;
+            },
+            AddrMode::Rel => {
+                // TODO
+                res.addr = self.regs.PC + (*ops).0 as u16; 
+                res.clk_count = 5;
+            }
+        };
+
+        res
     }
 
     //
@@ -427,28 +526,19 @@ impl<'a> Cpu<'a> {
 
     fn op_load(&mut self, addr_mode: AddrMode, src_reg: RegMod) -> u64 {
         let ops = self.fetch_op(&addr_mode);
-       
+        let ea: EAResult = self.calc_eff_addr(&InstrGroup::Read, &addr_mode, &ops.unwrap());
+
         let v = match addr_mode {
             AddrMode::Imm => ops.unwrap().0,
-            _=>
-            {
-                 let eff_addr = self.calc_eff_addr(&addr_mode, &ops.unwrap());
-                 self.mem.read_byte(eff_addr)
+            _ => {
+                self.mem.read_byte(ea.addr)
             }
         };
 
         self.set_flags(FLAG_SIGN | FLAG_ZERO, v);
         self.write_register(&src_reg, v);
 
-        match addr_mode {
-            AddrMode::Imm => 2,
-            AddrMode::ZP => 3,
-            AddrMode::ZPX | AddrMode::ZPY | AddrMode::Abs => 4,
-            AddrMode::AbsX | AddrMode::AbsY => 4,
-            AddrMode::ZPIndX => 6,
-            AddrMode::ZPIndY => 5,
-            _ => panic!("unsupported_addr_mode")
-        }
+        ea.clk_count
     }
 
     fn op_store(&mut self, addr_mode: AddrMode, dst_reg: RegMod) -> u64 {

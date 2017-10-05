@@ -64,9 +64,9 @@ fn test_lda() {
         B5 FF     LDA $FF,X       ; ZPX
         AD 00 C0  LDA $c000       ; Abs
         BD 78 C2  LDA $C278,X     ; Abs X
-        B9 16 E0  LDA $E016,Y     ; Abs Y
+        B9 16 E0  LDA $E016,Y     ; Abs Y (+test page-boundary cross)
         A1 10     LDA ($10,X)     ; Ind X
-        B1 2C     LDA ($2C),Y     ; Ind Y
+        B1 2C     LDA ($2C),Y     ; Ind Y (+test page-boundary cross)
         */
 
     sys_mem.write_vec(
