@@ -379,6 +379,16 @@ impl<'a> Cpu<'a> {
         };
     }
 
+    fn read_register(&mut self, src_reg: &RegMod) -> u8 {
+        match *src_reg {
+            RegMod::A => self.regs.A,
+            RegMod::X => self.regs.X,
+            RegMod::Y => self.regs.Y,
+            RegMod::SR => self.regs.SR,
+            RegMod::SP => self.regs.SP,
+        }
+    }
+
     fn set_s_flag(&mut self, v: u8) {
         if v >= 0x80 {
             self.regs.SR |= FLAG_SIGN;
@@ -479,9 +489,9 @@ impl<'a> Cpu<'a> {
             AddrMode::ZPIndX => EAResult {
                 addr: self.addr_from_2b(
                     self.mem
-                        .read_byte(self.regs.X.wrapping_add((*ops).0) as u16),
+                        .read_byte((self.regs.X.wrapping_add((*ops).0)) as u16),
                     self.mem
-                        .read_byte(self.regs.X.wrapping_add(1).wrapping_add((*ops).0) as u16),
+                        .read_byte((self.regs.X.wrapping_add(1).wrapping_add((*ops).0)) as u16),
                 ),
                 clk_count: match *insgrp {
                     InstrGroup::Read | InstrGroup::Write => 6,
@@ -551,7 +561,12 @@ impl<'a> Cpu<'a> {
     }
 
     fn op_store(&mut self, addr_mode: AddrMode, dst_reg: RegMod) -> u64 {
-        0
+        let ops = self.fetch_op(&addr_mode);
+        let ea: EAResult = self.calc_eff_addr(&InstrGroup::Write, &addr_mode, &ops.unwrap());
+
+        let v = self.read_register(&dst_reg);
+        self.mem.write_byte(ea.addr, v);
+        ea.clk_count
     }
 
     fn op_tx(&mut self, src_reg: RegMod, dst_reg: RegMod) -> u64 {
