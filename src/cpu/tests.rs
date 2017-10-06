@@ -13,14 +13,13 @@ struct CpuState {
     sr: Option<u8>,
     pc: Option<u16>,
     sp: Option<u8>,
-    clk: Option<u64>,
 }
 
 fn setup_mem(sys_mem: &mut mem::Memory) {
     sys_mem.write_byte(0xC000, TEST_BYTE);
     sys_mem.write_byte(0xC07A, TEST_BYTE);
     sys_mem.write_byte(0xC27A, TEST_BYTE);
-    sys_mem.write_byte(0xE01A, TEST_BYTE);
+    sys_mem.write_byte(0xE115, TEST_BYTE);
     sys_mem.write_byte(0x0010, ZP_TEST_BYTE);
     sys_mem.write_byte(0x0080, ZP_TEST_BYTE);
     sys_mem.write_byte(0x0081, ZP_TEST_BYTE_NEG);
@@ -47,9 +46,6 @@ fn assert_cpu_state(cpu: &cpu::Cpu, cpu_state: &CpuState) {
     if cpu_state.pc.is_some() {
         assert_eq!(cpu.regs.PC, cpu_state.pc.unwrap());
     }
-    if cpu_state.clk.is_some() {
-        assert_eq!(cpu.clk_count, cpu_state.clk.unwrap());
-    }
 }
 
 #[test]
@@ -72,32 +68,21 @@ fn test_lda() {
     sys_mem.write_vec(
         0,
         &vec![
-            0xA9,
-            0x01,
-            0xA5,
-            0x80,
-            0xB5,
-            0xff,
-            0xad,
-            0x00,
-            0xc0,
-            0xbd,
-            0x78,
-            0xC2,
-            0xb9,
-            0x16,
-            0xe0,
-            0xa1,
-            0x10,
-            0xb1,
-            0x2c,
+            0xA9, 0x01,
+            0xA5, 0x80,
+            0xB5, 0xff,
+            0xad, 0x00, 0xc0,
+            0xbd, 0x78, 0xC2,
+            0xb9, 0x16, 0xe0,
+            0xa1, 0x10, 
+            0xb1, 0x2c,
         ],
     );
 
     // LDA #$01
     println!("LDA $#01");
     let mut sys_cpu = cpu::Cpu::new(&mut sys_mem);
-    sys_cpu.exec();
+    assert_eq!(sys_cpu.exec(), 2);
     assert_cpu_state(
         &sys_cpu,
         &CpuState {
@@ -106,14 +91,13 @@ fn test_lda() {
             y: None,
             sp: None,
             pc: Some(0x0002),
-            clk: Some(2),
             sr: Some(0),
         },
     );
 
     // LDA $80
     println!("LDA $80");
-    sys_cpu.exec();
+    assert_eq!(sys_cpu.exec(), 3);
     assert_cpu_state(
         &sys_cpu,
         &CpuState {
@@ -122,7 +106,6 @@ fn test_lda() {
             y: None,
             sp: None,
             pc: Some(0x0004),
-            clk: Some(5),
             sr: Some(0),
         },
     );
@@ -131,7 +114,7 @@ fn test_lda() {
     println!("LDA $FF,X");
     sys_cpu.regs.SR = 0;
     sys_cpu.regs.X = 0x82;
-    sys_cpu.exec();
+    assert_eq!(sys_cpu.exec(), 4);
     assert_cpu_state(
         &sys_cpu,
         &CpuState {
@@ -140,7 +123,6 @@ fn test_lda() {
             y: None,
             sp: None,
             pc: Some(0x0006),
-            clk: Some(9),
             sr: Some(FLAG_SIGN),
         },
     );
@@ -148,7 +130,7 @@ fn test_lda() {
     // LDA $C000
     println!("LDA $C000");
     sys_cpu.regs.SR = 0;
-    sys_cpu.exec();
+    assert_eq!(sys_cpu.exec(), 4);
     assert_cpu_state(
         &sys_cpu,
         &CpuState {
@@ -157,7 +139,6 @@ fn test_lda() {
             y: None,
             sp: None,
             pc: Some(0x0009),
-            clk: Some(13),
             sr: Some(FLAG_SIGN),
         },
     );
@@ -167,7 +148,7 @@ fn test_lda() {
     println!("LDA $C278,X");
     sys_cpu.regs.SR = 0;
     sys_cpu.regs.X = 0x2;
-    sys_cpu.exec();
+    assert_eq!(sys_cpu.exec(), 4);
     assert_cpu_state(
         &sys_cpu,
         &CpuState {
@@ -176,7 +157,6 @@ fn test_lda() {
             y: None,
             sp: None,
             pc: Some(0x000C),
-            clk: Some(17),
             sr: Some(FLAG_SIGN),
         },
     );
@@ -185,17 +165,16 @@ fn test_lda() {
     // LDA $E016,Y
     println!("LDA $E016,Y");
     sys_cpu.regs.SR = 0;
-    sys_cpu.regs.Y = 0x4;
-    sys_cpu.exec();
+    sys_cpu.regs.Y = 0xFF;
+    assert_eq!(sys_cpu.exec(), 5); // page-boundary cross
     assert_cpu_state(
         &sys_cpu,
         &CpuState {
             a: Some(TEST_BYTE),
             x: None,
-            y: Some(4),
+            y: Some(0xFF),
             sp: None,
             pc: Some(0x000F),
-            clk: Some(21),
             sr: Some(FLAG_SIGN),
         },
     );
@@ -205,7 +184,7 @@ fn test_lda() {
     println!("LDA ($10,X)");
     sys_cpu.regs.SR = 0;
     sys_cpu.regs.X = 0x1C;
-    sys_cpu.exec();
+    assert_eq!(sys_cpu.exec(), 6);
     assert_cpu_state(
         &sys_cpu,
         &CpuState {
@@ -214,7 +193,6 @@ fn test_lda() {
             y: None,
             sp: None,
             pc: Some(0x0011),
-            clk: Some(27),
             sr: Some(FLAG_SIGN),
         },
     );
@@ -224,7 +202,7 @@ fn test_lda() {
     println!("LDA ($2C),Y");
     sys_cpu.regs.SR = 0;
     sys_cpu.regs.Y = 0x7A;
-    sys_cpu.exec();
+    assert_eq!(sys_cpu.exec(), 6);
     assert_cpu_state(
         &sys_cpu,
         &CpuState {
@@ -233,7 +211,6 @@ fn test_lda() {
             y: Some(0x7a),
             sp: None,
             pc: Some(0x0013),
-            clk: Some(32),
             sr: Some(FLAG_SIGN),
         },
     );
