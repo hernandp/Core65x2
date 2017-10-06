@@ -1,0 +1,25 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug Test",
+            "program": "${workspaceRoot}/target/debug/rusty8-d42c7844c27c345a",
+            "args": [],
+            "cwd": "${workspaceRoot}",
+            "preLaunchTask": "cargo build",
+            "sourceLanguages": ["rust"]
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug",
+            "program": "${workspaceRoot}/target/debug/rusty8",
+            "args": [],
+            "cwd": "${workspaceRoot}",
+            "preLaunchTask": "cargo build",
+            "sourceLanguages": ["rust"]
+        }
+    ]
+}
