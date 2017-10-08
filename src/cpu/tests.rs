@@ -378,3 +378,125 @@ fn test_sta() {
     );
     assert_mem_u8(&sys_cpu.mem, 0xC07A, 0x66);
 }
+
+#[test]
+fn test_tx() {
+    /* Test:
+    8A TXA
+    AA TAX
+    98 TYA
+    A8 TAY
+    BA TSX
+    9A TXS
+    */
+
+
+    let mut sys_mem = mem::Memory::new();
+    setup_mem(&mut sys_mem);
+    sys_mem.write_vec(
+        0,
+        &vec![ 0x8A, 0xAA, 0x98, 0xA8, 0xBA, 0x9A ],
+    );
+
+    println!("TXA");
+    let mut sys_cpu = cpu::Cpu::new(&mut sys_mem);
+    sys_cpu.regs.X = 0xff;
+    assert_eq!(sys_cpu.exec(), 2);
+    assert_cpu_state(
+        &sys_cpu,
+        &CpuState {
+            a: Some(0xff),
+            x: Some(0xff),
+            y: None,
+            sp: None,
+            pc: Some(0x0001),
+            sr: Some(FLAG_SIGN),
+        },
+    );
+
+    println!("TAX");
+    sys_cpu.regs.X = 0xFF;
+    sys_cpu.regs.A = 0x00;
+    assert_eq!(sys_cpu.exec(), 2);
+    assert_cpu_state(
+        &sys_cpu,
+        &CpuState {
+            a: Some(0x00),
+            x: Some(0x00),
+            y: None,
+            sp: None,
+            pc: Some(0x0002),
+            sr: Some(FLAG_ZERO),
+        },
+    );    
+
+    println!("TYA");
+    sys_cpu.regs.Y = 0x11;
+    sys_cpu.regs.A = 0x00;
+    assert_eq!(sys_cpu.exec(), 2);
+    assert_cpu_state(
+        &sys_cpu,
+        &CpuState {
+            a: Some(0x11),
+            x: None,
+            y: Some(0x11),
+            sp: None,
+            pc: Some(0x0003),
+            sr: Some(0),
+        },
+    );
+
+    println!("TAY");
+    sys_cpu.regs.A = 0x11;
+    sys_cpu.regs.Y = 0x00;
+    assert_eq!(sys_cpu.exec(), 2);
+    assert_cpu_state(
+        &sys_cpu,
+        &CpuState {
+            a: Some(0x11),
+            x: None,
+            y: Some(0x11),
+            sp: None,
+            pc: Some(0x0004),
+            sr: Some(0),
+        },
+    );    
+
+    println!("TSX");
+    sys_cpu.regs.SP = 0x00;
+    assert_eq!(sys_cpu.exec(), 2);
+    assert_cpu_state(
+        &sys_cpu,
+        &CpuState {
+            a: None,
+            x: Some(0x00),
+            y: None,
+            sp: Some(0x00),
+            pc: Some(0x0005),
+            sr: Some(FLAG_ZERO),
+        },
+    );    
+
+    println!("TXS");
+    sys_cpu.regs.SP = 0x00;
+    sys_cpu.regs.X = 0xFF;
+    assert_eq!(sys_cpu.exec(), 2);
+    assert_cpu_state(
+        &sys_cpu,
+        &CpuState {
+            a: None,
+            x: Some(0xFF),
+            y: None,
+            sp: Some(0xFF),
+            pc: Some(0x0006),
+            sr: Some(FLAG_SIGN),
+        },
+    );
+
+
+}
+
+#[test]
+fn test_inc() {
+
+}
