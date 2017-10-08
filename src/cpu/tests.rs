@@ -498,5 +498,105 @@ fn test_tx() {
 
 #[test]
 fn test_inc() {
+    let mut sys_mem = mem::Memory::new();
+    setup_mem(&mut sys_mem);
+
+    /* Test:
+        E6 INC $80
+        F6 INC $80,X
+        EE INC $C000
+        FE INC $C000,X
+        */
+
+    sys_mem.write_vec(
+        0,
+        &vec![
+            0xe6, 0x80,
+            0xf6, 0x80,
+            0xee, 0x00, 0xc0,
+            0xfe, 0x00, 0xc0
+        ],
+    );
+
+    // INC $80
+    println!("INC $80");
+    let mut sys_cpu = cpu::Cpu::new(&mut sys_mem);
+    assert_eq!(sys_cpu.exec(), 5);
+    assert_cpu_state(
+        &sys_cpu,
+        &CpuState {
+            a: None,
+            x: None,
+            y: None,
+            sp: None,
+            pc: Some(0x0002),
+            sr: Some(0),
+        },
+    );
+    assert_mem_u8(&sys_cpu.mem, 0x0080, 0x4F);
+
+    // INC $80
+    println!("INC $80,X");
+    sys_cpu.regs.X = 0x1;
+    assert_eq!(sys_cpu.exec(), 6);
+    assert_cpu_state(
+        &sys_cpu,
+        &CpuState {
+            a: None,
+            x: None,
+            y: None,
+            sp: None,
+            pc: Some(0x0004),
+            sr: Some(FLAG_SIGN),
+        },
+    );
+    assert_mem_u8(&sys_cpu.mem, 0x0081, 0);
+
+    // INC $c000
+    println!("INC $C000");
+    assert_eq!(sys_cpu.exec(), 6);
+    assert_cpu_state(
+        &sys_cpu,
+        &CpuState {
+            a: None,
+            x: None,
+            y: None,
+            sp: None,
+            pc: Some(0x0007),
+            sr: Some(FLAG_SIGN),
+        },
+    );
+    assert_mem_u8(&sys_cpu.mem, 0xc000,TEST_BYTE.wrapping_add(1));
+
+    // INC $c000,x
+    println!("INC $C000,x");
+    sys_cpu.regs.X = 0x7A;
+    assert_eq!(sys_cpu.exec(), 7);
+    assert_cpu_state(
+        &sys_cpu,
+        &CpuState {
+            a: None,
+            x: Some(0x7a),
+            y: None,
+            sp: None,
+            pc: Some(0x000A),
+            sr: Some(FLAG_SIGN),
+        },
+    );
+    assert_mem_u8(&sys_cpu.mem, 0xc07A, TEST_BYTE.wrapping_add(1));
+}
+
+#[test]
+fn test_ora() {
+
+}
+
+#[test]
+fn test_eor() {
+
+}
+
+#[test]
+fn test_and() {
 
 }

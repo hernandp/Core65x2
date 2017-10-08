@@ -577,15 +577,30 @@ impl<'a> Cpu<'a> {
     }
 
     fn op_or(&mut self, addr_mode: AddrMode) -> u64 {
-        0
+        let ops = self.fetch_op(&addr_mode);
+        let ea: EAResult = self.calc_eff_addr(&InstrGroup::ReadWrite, &addr_mode, &ops.unwrap());
+        let v = self.mem.read_byte(ea.addr);
+        self.mem.write_byte(ea.addr, v | self.regs.A);
+        self.set_flags(FLAG_SIGN | FLAG_ZERO, v);
+        ea.clk_count
     }
 
     fn op_and(&mut self, addr_mode: AddrMode) -> u64 {
-        0
+        let ops = self.fetch_op(&addr_mode);
+        let ea: EAResult = self.calc_eff_addr(&InstrGroup::ReadWrite, &addr_mode, &ops.unwrap());
+        let v = self.mem.read_byte(ea.addr);
+        self.mem.write_byte(ea.addr, v & self.regs.A);
+        self.set_flags(FLAG_SIGN | FLAG_ZERO, v);
+        ea.clk_count
     }
 
     fn op_xor(&mut self, addr_mode: AddrMode) -> u64 {
-        0
+        let ops = self.fetch_op(&addr_mode);
+        let ea: EAResult = self.calc_eff_addr(&InstrGroup::ReadWrite, &addr_mode, &ops.unwrap());
+        let v = self.mem.read_byte(ea.addr);
+        self.mem.write_byte(ea.addr, v ^ self.regs.A);
+        self.set_flags(FLAG_SIGN | FLAG_ZERO, v);
+        ea.clk_count
     }
 
     fn op_adc(&mut self, addr_mode: AddrMode) -> u64 {
@@ -601,7 +616,12 @@ impl<'a> Cpu<'a> {
     }
 
     fn op_dec(&mut self, addr_mode: AddrMode, dst_reg: RegMod) -> u64 {
-        0
+        let ops = self.fetch_op(&addr_mode);
+        let ea: EAResult = self.calc_eff_addr(&InstrGroup::ReadWrite, &addr_mode, &ops.unwrap());
+        let v = self.mem.read_byte(ea.addr);
+        self.mem.write_byte(ea.addr, v.wrapping_sub(1));
+        self.set_flags(FLAG_SIGN | FLAG_ZERO, v);
+        ea.clk_count
     }
 
     fn op_inc(&mut self, addr_mode: AddrMode, dst_reg: RegMod) -> u64 {
