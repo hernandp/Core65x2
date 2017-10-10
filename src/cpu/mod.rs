@@ -456,6 +456,7 @@ impl<'a> Cpu<'a> {
                 clk_count: match *insgrp {
                     InstrGroup::Read | InstrGroup::Write => 3,
                     InstrGroup::ReadWrite => 5,
+                    _ => panic!()
                 },
             },
             AddrMode::ZPX => EAResult {
@@ -463,6 +464,7 @@ impl<'a> Cpu<'a> {
                 clk_count: match *insgrp {
                     InstrGroup::Read | InstrGroup::Write => 4,
                     InstrGroup::ReadWrite => 6,
+                    _ => panic!()
                 },
             },
             AddrMode::ZPY => EAResult {
@@ -470,11 +472,13 @@ impl<'a> Cpu<'a> {
                 clk_count: match *insgrp {
                     InstrGroup::Read | InstrGroup::Write => 4,
                     InstrGroup::ReadWrite => 6,
+                    _ => panic!()
                 },
             },
             AddrMode::Abs => EAResult {
                 addr: self.addr_from_2b((*ops).0, (*ops).1.unwrap()),
                 clk_count: match *insgrp {
+                    InstrGroup::Jump => 3,
                     InstrGroup::Read | InstrGroup::Write => 4,
                     InstrGroup::ReadWrite => 6,
                 },
@@ -493,6 +497,7 @@ impl<'a> Cpu<'a> {
                         InstrGroup::Read => 4 + page_cross_clk,
                         InstrGroup::Write => 5,
                         InstrGroup::ReadWrite => 7,
+                        _ => panic!()
                     },
                 }
             }
@@ -508,6 +513,7 @@ impl<'a> Cpu<'a> {
                         InstrGroup::Read => 4 + page_cross_clk,
                         InstrGroup::Write => 5,
                         InstrGroup::ReadWrite => 7,
+                        _ => panic!()
                     },
                 }
             }
@@ -521,6 +527,7 @@ impl<'a> Cpu<'a> {
                 clk_count: match *insgrp {
                     InstrGroup::Read | InstrGroup::Write => 6,
                     InstrGroup::ReadWrite => 8,
+                    _ => panic!()
                 },
             },
             AddrMode::ZPIndY => {
@@ -543,6 +550,7 @@ impl<'a> Cpu<'a> {
                         InstrGroup::Read => 6 + page_cross_clk,
                         InstrGroup::Write => 6,
                         InstrGroup::ReadWrite => 8,
+                        _ => panic!()
                     },
                 }
             }
@@ -747,6 +755,7 @@ impl<'a> Cpu<'a> {
     }
 
     fn op_pull(&mut self, dst_reg: RegMod) -> u64 {
+        0
         
     }
 
