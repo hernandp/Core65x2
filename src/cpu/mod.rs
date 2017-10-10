@@ -342,7 +342,7 @@ impl<'a> Cpu<'a> {
     //
     // Fetch operands, updating program counter
     //
-    fn fetch_op(&mut self, addr_mode: &AddrMode) -> Option<Operands> {      
+    fn fetch_op(&mut self, addr_mode: &AddrMode) -> Option<Operands> {
         let operands: Option<Operands>;
         match *addr_mode {
             AddrMode::Imm |
@@ -405,7 +405,31 @@ impl<'a> Cpu<'a> {
         }
     }
 
-    fn set_flags(&mut self, flags: u8, v: u8) {
+    fn set_c_flag(&mut self, v: bool) {
+        if v == false {
+            self.regs.SR |= FLAG_CARRY;
+        } else {
+            self.regs.SR &= !FLAG_CARRY;
+        }
+    }
+
+    fn set_v_flag(&mut self, v: bool) {
+        if v == false {
+            self.regs.SR |= FLAG_CARRY;
+        } else {
+            self.regs.SR &= !FLAG_CARRY;
+        }
+    }
+
+    fn set_d_flag(&mut self, v: bool) {
+        if v == false {
+            self.regs.SR |= FLAG_DEC;
+        } else {
+            self.regs.SR &= !FLAG_DEC;
+        }
+    }
+
+    fn set_nz_flags(&mut self, flags: u8, v: u8) {
         if FLAG_ZERO == (flags & FLAG_ZERO) {
             self.set_z_flag(v);
         }
@@ -541,20 +565,38 @@ impl<'a> Cpu<'a> {
         }
     }
 
+    // -----------------------------------------------------------------------------------------------------
     //
     // Opcode implementations
     //
+    // -----------------------------------------------------------------------------------------------------
+
+    // This macro will generate the code for fetching operands, calculating effective address/clocks,
+    // and optionally reading operand value from EA
+    // //
+    // macro_rules! fetch_op_ea {
+    //     ($ops:ident, $addrmode, $ea:ident, $v:ident) => {
+    //          let $ops = self.fetch_op(&addr_mode);
+    //          let $ea: EAResult = self.calc_eff_addr(&InstrGroup::Read, &addr_mode, &ops.unwrap());
+
+    //         let v = match addr_mode {
+    //             AddrMode::Imm => ops.unwrap().0,
+    //         _ => self.mem.read_byte(ea.addr),
+    //     };
+
+            
+    //     };
+    // }
 
     fn op_load(&mut self, addr_mode: AddrMode, src_reg: RegMod) -> u64 {
         let ops = self.fetch_op(&addr_mode);
         let ea: EAResult = self.calc_eff_addr(&InstrGroup::Read, &addr_mode, &ops.unwrap());
-
         let v = match addr_mode {
             AddrMode::Imm => ops.unwrap().0,
             _ => self.mem.read_byte(ea.addr),
         };
 
-        self.set_flags(FLAG_SIGN | FLAG_ZERO, v);
+        self.set_nz_flags(FLAG_SIGN | FLAG_ZERO, v);
         self.write_register(&src_reg, v);
 
         ea.clk_count
@@ -563,7 +605,6 @@ impl<'a> Cpu<'a> {
     fn op_store(&mut self, addr_mode: AddrMode, dst_reg: RegMod) -> u64 {
         let ops = self.fetch_op(&addr_mode);
         let ea: EAResult = self.calc_eff_addr(&InstrGroup::Write, &addr_mode, &ops.unwrap());
-
         let v = self.read_register(&dst_reg);
         self.mem.write_byte(ea.addr, v);
         ea.clk_count
@@ -572,7 +613,7 @@ impl<'a> Cpu<'a> {
     fn op_tx(&mut self, src_reg: RegMod, dst_reg: RegMod) -> u64 {
         let v = self.read_register(&src_reg);
         self.write_register(&dst_reg, v);
-        self.set_flags(FLAG_SIGN | FLAG_ZERO, v);
+        self.set_nz_flags(FLAG_SIGN | FLAG_ZERO, v);
         2
     }
 
@@ -581,7 +622,7 @@ impl<'a> Cpu<'a> {
         let ea: EAResult = self.calc_eff_addr(&InstrGroup::ReadWrite, &addr_mode, &ops.unwrap());
         let v = self.mem.read_byte(ea.addr);
         self.mem.write_byte(ea.addr, v | self.regs.A);
-        self.set_flags(FLAG_SIGN | FLAG_ZERO, v);
+        self.set_nz_flags(FLAG_SIGN | FLAG_ZERO, v);
         ea.clk_count
     }
 
@@ -590,7 +631,7 @@ impl<'a> Cpu<'a> {
         let ea: EAResult = self.calc_eff_addr(&InstrGroup::ReadWrite, &addr_mode, &ops.unwrap());
         let v = self.mem.read_byte(ea.addr);
         self.mem.write_byte(ea.addr, v & self.regs.A);
-        self.set_flags(FLAG_SIGN | FLAG_ZERO, v);
+        self.set_nz_flags(FLAG_SIGN | FLAG_ZERO, v);
         ea.clk_count
     }
 
@@ -599,20 +640,73 @@ impl<'a> Cpu<'a> {
         let ea: EAResult = self.calc_eff_addr(&InstrGroup::ReadWrite, &addr_mode, &ops.unwrap());
         let v = self.mem.read_byte(ea.addr);
         self.mem.write_byte(ea.addr, v ^ self.regs.A);
-        self.set_flags(FLAG_SIGN | FLAG_ZERO, v);
+        self.set_nz_flags(FLAG_SIGN | FLAG_ZERO, v);
         ea.clk_count
     }
 
     fn op_adc(&mut self, addr_mode: AddrMode) -> u64 {
-        0
+        let ops = self.fetch_op(&addr_mode);
+        let ea: EAResult = self.calc_eff_addr(&InstrGroup::Read, &addr_mode, &ops.unwrap());
+        let v = match addr_mode {
+            AddrMode::Imm => ops.unwrap().0,
+            _ => self.mem.read_byte(ea.addr),
+        };
+        
+        let add_res: u32 = self.regs.A as u32 + v as u32 + if self.regs.SR & FLAG_CARRY == FLAG_CARRY { 1u32 } else { 0u32 };
+        if add_res > 0xFF {
+            self.set_c_flag(true);
+        }
+        let of_check: bool = ((self.regs.A ^ v) & 0x80) != 0 && ((self.regs.A ^ v) & 0x80) != 0;
+        self.set_v_flag(!of_check);
+
+        if self.regs.SR & FLAG_DEC == FLAG_DEC {
+            // Support decimal
+        }
+
+        self.regs.A = add_res as u8;
+        self.set_nz_flags(FLAG_SIGN | FLAG_ZERO, add_res as u8);
+        ea.clk_count
     }
 
     fn op_sbc(&mut self, addr_mode: AddrMode) -> u64 {
-        0
+        let ops = self.fetch_op(&addr_mode);
+        let ea: EAResult = self.calc_eff_addr(&InstrGroup::Read, &addr_mode, &ops.unwrap());
+        let v = match addr_mode {
+            AddrMode::Imm => ops.unwrap().0,
+            _ => self.mem.read_byte(ea.addr),
+        };
+        
+        let sbc_res: u32 = self.regs.A as u32 - v as u32 - if self.regs.SR & FLAG_CARRY == FLAG_CARRY { 0u32 } else { 1u32 };
+        if sbc_res < 0x100 {
+            self.set_c_flag(true);
+        }
+        let of_check: bool = ((self.regs.A ^ v) & 0x80) != 0 && ((self.regs.A ^ v) & 0x80) != 0;
+        self.set_v_flag(of_check);
+
+        if self.regs.SR & FLAG_DEC == FLAG_DEC {
+            // Support decimal
+        }
+
+        self.regs.A = sbc_res as u8;
+        self.set_nz_flags(FLAG_SIGN | FLAG_ZERO, sbc_res as u8);
+        ea.clk_count        
     }
 
     fn op_cmp(&mut self, addr_mode: AddrMode, src_reg: RegMod) -> u64 {
-        0
+        let ops = self.fetch_op(&addr_mode);
+        let ea: EAResult = self.calc_eff_addr(&InstrGroup::Read, &addr_mode, &ops.unwrap());
+        let v = match addr_mode {
+            AddrMode::Imm => ops.unwrap().0,
+            _ => self.mem.read_byte(ea.addr),
+        };
+
+        let sbc_res: u32 = self.regs.A as u32 - v as u32;
+        if sbc_res < 0x100 {
+            self.set_c_flag(true);
+        }
+
+        self.set_nz_flags(FLAG_SIGN | FLAG_ZERO, cmp_res.0);
+        ea.clk_count
     }
 
     fn op_dec(&mut self, addr_mode: AddrMode, dst_reg: RegMod) -> u64 {
@@ -620,7 +714,7 @@ impl<'a> Cpu<'a> {
         let ea: EAResult = self.calc_eff_addr(&InstrGroup::ReadWrite, &addr_mode, &ops.unwrap());
         let v = self.mem.read_byte(ea.addr);
         self.mem.write_byte(ea.addr, v.wrapping_sub(1));
-        self.set_flags(FLAG_SIGN | FLAG_ZERO, v);
+        self.set_nz_flags(FLAG_SIGN | FLAG_ZERO, v);
         ea.clk_count
     }
 
@@ -629,7 +723,7 @@ impl<'a> Cpu<'a> {
         let ea: EAResult = self.calc_eff_addr(&InstrGroup::ReadWrite, &addr_mode, &ops.unwrap());
         let v = self.mem.read_byte(ea.addr);
         self.mem.write_byte(ea.addr, v.wrapping_add(1));
-        self.set_flags(FLAG_SIGN | FLAG_ZERO, v);
+        self.set_nz_flags(FLAG_SIGN | FLAG_ZERO, v);
         ea.clk_count
     }
 
