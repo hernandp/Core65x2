@@ -55,6 +55,7 @@ enum InstrGroup {
     Read,
     ReadWrite,
     Write,
+    Jump
 }
 
 // Effective address: (address, clock count)
@@ -565,6 +566,16 @@ impl<'a> Cpu<'a> {
         }
     }
 
+    fn push_stack(&mut self, v: u8) {
+        self.mem.write_byte(self.regs.SP as u16, v);
+        self.regs.SP = self.regs.SP - 1;
+    }
+
+    fn pop_stack(&mut self) -> u8 {
+        self.regs.SP = self.regs.SP + 1;
+        self.mem.read_byte(self.regs.SP as u16)
+    }
+
     // -----------------------------------------------------------------------------------------------------
     //
     // Opcode implementations
@@ -700,12 +711,12 @@ impl<'a> Cpu<'a> {
             _ => self.mem.read_byte(ea.addr),
         };
 
-        let sbc_res: u32 = self.regs.A as u32 - v as u32;
-        if sbc_res < 0x100 {
+        let cmp_res: u32 = self.regs.A as u32 - v as u32;
+        if cmp_res < 0x100 {
             self.set_c_flag(true);
         }
 
-        self.set_nz_flags(FLAG_SIGN | FLAG_ZERO, cmp_res.0);
+        self.set_nz_flags(FLAG_SIGN | FLAG_ZERO, cmp_res as u8);
         ea.clk_count
     }
 
@@ -736,7 +747,7 @@ impl<'a> Cpu<'a> {
     }
 
     fn op_pull(&mut self, dst_reg: RegMod) -> u64 {
-        0
+        
     }
 
     fn op_push(&mut self, src_reg: RegMod) -> u64 {
@@ -756,15 +767,27 @@ impl<'a> Cpu<'a> {
     }
 
     fn op_jsr(&mut self) -> u64 {
-        0
+        let ops = self.fetch_op(&AddrMode::Abs);
+        self.regs.PC -= 1;
+        let pch: u8 = (self.regs.PC >> 8) as u8;
+        let pcl: u8 = (self.regs.PC & 0xFF) as u8;
+        self.push_stack(pch);
+        self.push_stack(pcl);
+        6
     }
 
     fn op_rts(&mut self) -> u64 {
-        0
+        let pcl: u8 = self.pop_stack();
+        let pch: u8 = self.pop_stack();
+        self.regs.PC = (((pch as u16) << 8) | pcl as u16).wrapping_add(1);
+        6
     }
 
-    fn op_jmp(&mut self, addrm: AddrMode) -> u64 {
-        0
+    fn op_jmp(&mut self, addr_mode: AddrMode) -> u64 {
+        let ops = self.fetch_op(&addr_mode);
+        let ea: EAResult = self.calc_eff_addr(&InstrGroup::Jump, &addr_mode, &ops.unwrap());
+        self.regs.PC = ea.addr;
+        ea.clk_count
     }
 
     fn op_bit(&mut self, addrm: AddrMode) -> u64 {
