@@ -15,6 +15,10 @@ fn main() {
 
     loop {
         let cmd = cmdint::do_prompt();
+        if cmd == cmdint::Command::Quit {
+            println!("BYE!");
+            break;
+        }
         if !cmdint::exec(&cmd, &mut sys_cpu) {
             break;
         }
