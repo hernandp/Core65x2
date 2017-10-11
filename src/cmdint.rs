@@ -50,6 +50,7 @@ pub fn do_prompt() -> Command {
                     }
                 }
             }
+            Some('R') => { return Command::Reg; }
             Some('A') => println!("ASS"),
             Some('?') => println!("Help"),
             _ => println!("?"),
@@ -59,7 +60,22 @@ pub fn do_prompt() -> Command {
     Command::Null
 }
 
-
 pub fn exec(cmd: &Command, cpu: &mut cpu::Cpu) -> bool {
+    match *cmd {
+        Command::Reg => {
+            println!("PC      N V - B D I Z C    AC  XR  YR  SP");
+            println!("{:04X}    {rN} {rV}   {rB} {rD} {rI} {rZ} {rC}    {ac:02X}  {xr:02X}  {yr:02X}  {sp:02X}", regs = cpu.regs.PC, 
+            ac = cpu.regs.A, xr = cpu.regs.X, yr = cpu.regs.Y, sp = cpu.regs.SP,
+            rB = if cpu.is_flag_on(cpu::FLAG_BRK) { '1' } else { '.' },
+            rN = if cpu.is_flag_on(cpu::FLAG_SIGN) { '1' } else { '.' },
+            rV = if cpu.is_flag_on(cpu::FLAG_OF) { '1' } else { '.' },
+            rD = if cpu.is_flag_on(cpu::FLAG_DEC) { '1' } else { '.' },
+            rI = if cpu.is_flag_on(cpu::FLAG_INTR) { '1' } else { '.' },
+            rZ = if cpu.is_flag_on(cpu::FLAG_ZERO) { '1' } else { '.' },
+            rC = if cpu.is_flag_on(cpu::FLAG_CARRY) { '1' } else { '.' });
+        },
+        Command::Quit => { return false; },
+        _ => {}
+    }
     true
 }

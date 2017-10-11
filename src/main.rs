@@ -9,18 +9,21 @@ fn main() {
     println!("MOS 6502/65C02/65CE02 Monitor and Emulator");
     println!("Copyright (c) 2017 Hernan Di Pietro");
     println!("Type LICENSE for license terms.");
-    
+    println!("");
+    println!("CPU Mode 6502");
+        
     let mut sys_mem = Memory::new();
     let mut sys_cpu = Cpu::new(&mut sys_mem);
 
+    sys_cpu.reset();
+    cmdint::exec(&cmdint::Command::Reg, &mut sys_cpu);
+
     loop {
         let cmd = cmdint::do_prompt();
-        if cmd == cmdint::Command::Quit {
-            println!("BYE!");
-            break;
-        }
         if !cmdint::exec(&cmd, &mut sys_cpu) {
             break;
         }
     }  
+
+    println!("BYE!");
 }

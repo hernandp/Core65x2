@@ -3,20 +3,26 @@ mod tests;
 
 use super::mem::Memory;
 
-const BOOT_PC_ADDR: u16 = 0xFFFE;
 const STACK_ADDR_BASE: u16 = 0x01FF;
 const STACK_ADDR_LIMIT: u16 = 0x0100;
 
 //
 // Processor Status Register flags
 //
-const FLAG_CARRY: u8 = 0b0000_0001;
-const FLAG_ZERO: u8 = 0b0000_0010;
-const FLAG_INTR: u8 = 0b0000_0100;
-const FLAG_DEC: u8 = 0b0000_1000;
-const FLAG_BRK: u8 = 0b0001_0000;
-const FLAG_OF: u8 = 0b0100_0000;
-const FLAG_SIGN: u8 = 0b1000_0000;
+pub const FLAG_CARRY: u8 = 0b0000_0001;
+pub const FLAG_ZERO: u8 = 0b0000_0010;
+pub const FLAG_INTR: u8 = 0b0000_0100;
+pub const FLAG_DEC: u8 = 0b0000_1000;
+pub const FLAG_BRK: u8 = 0b0001_0000;
+pub const FLAG_OF: u8 = 0b0100_0000;
+pub const FLAG_SIGN: u8 = 0b1000_0000;
+
+// 
+// Vector adresses
+//
+const VECTOR_NMI: u16 = 0xFFFA;
+const VECTOR_RESET:u16= 0xFFFC;
+const VECTOR_IRQ_BRK:  u16= 0xFFFE;
 
 //
 // Instruction operands
@@ -65,17 +71,17 @@ struct EAResult {
 }
 
 // 6502 CPU registers
-struct Regs {
-    A: u8,
-    X: u8,
-    Y: u8,
-    PC: u16,
-    SP: u8,
-    SR: u8,
+pub struct Regs {
+    pub A: u8,
+    pub X: u8,
+    pub Y: u8,
+    pub PC: u16,
+    pub SP: u8,
+    pub SR: u8,
 }
 
 pub struct Cpu<'a> {
-    regs: Regs,
+    pub regs: Regs,
     mem: &'a mut Memory,
     clk_count: u64,
 }
@@ -97,6 +103,15 @@ impl<'a> Cpu<'a> {
             clk_count: 0,
             mem: sysmem,
         }
+    }
+
+    // 
+    // Do the RESET cycle for the emulated processor
+    //
+    pub fn reset(&mut self) {
+        self.regs.PC = self.addr_from_2b(self.mem.read_byte(VECTOR_RESET),self.mem.read_byte(VECTOR_RESET + 1));
+        self.regs.SP = 0xFD;
+        self.clk_count = 7;
     }
 
     //
@@ -389,6 +404,11 @@ impl<'a> Cpu<'a> {
             RegMod::SP => self.regs.SP,
         }
     }
+
+    pub fn is_flag_on(&self, flag: u8) -> bool {
+        self.regs.SR & flag == flag 
+    }
+
 
     fn set_s_flag(&mut self, v: u8) {
         if v >= 0x80 {
