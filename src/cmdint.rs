@@ -12,10 +12,15 @@ enum RegMod {
 
 #[derive(PartialEq)]
 pub enum Command {
+    Asm,
+    Disasm,
+    Mem,
+    Go,
     Null,
     Quit,
-    Reg,
+    Reg,    
 }
+
 
 pub fn do_prompt() -> Command {
     let mut line = String::new();
@@ -51,7 +56,9 @@ pub fn do_prompt() -> Command {
                 }
             }
             Some('R') => { return Command::Reg; }
-            Some('A') => println!("ASS"),
+            Some('A') => { return Command::Asm; }
+            Some('G') => { return Command::Go;  }
+            Some('D') => { return Command::Disasm; }
             Some('?') => println!("Help"),
             _ => println!("?"),
         }
@@ -62,6 +69,9 @@ pub fn do_prompt() -> Command {
 
 pub fn exec(cmd: &Command, cpu: &mut cpu::Cpu) -> bool {
     match *cmd {
+        Command::Go => {
+            let clk = cpu.exec();
+        },
         Command::Reg => {
             println!("PC      N V - B D I Z C    AC  XR  YR  SP");
             println!("{:04X}    {rN} {rV}   {rB} {rD} {rI} {rZ} {rC}    {ac:02X}  {xr:02X}  {yr:02X}  {sp:02X}", regs = cpu.regs.PC, 
@@ -74,6 +84,9 @@ pub fn exec(cmd: &Command, cpu: &mut cpu::Cpu) -> bool {
             rZ = if cpu.is_flag_on(cpu::FLAG_ZERO) { '1' } else { '.' },
             rC = if cpu.is_flag_on(cpu::FLAG_CARRY) { '1' } else { '.' });
         },
+        Command::Disasm => {
+
+        }
         Command::Quit => { return false; },
         _ => {}
     }
