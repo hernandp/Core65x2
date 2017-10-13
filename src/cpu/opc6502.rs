@@ -2,7 +2,7 @@ use cpu::AddrMode;
 use cpu::RegMod;
 use cpu::{ FLAG_CARRY, FLAG_DEC, FLAG_INTR, FLAG_OF, FLAG_SIGN, FLAG_ZERO};
 
-enum InsGrp {
+pub enum InsGrp {
     Load, Store, Tx_from_A, Tx_from_X, Tx_from_Y, Tx_from_SP,
     Push, Pull,  Or, And, Xor, Adc, Sbc, Cmp, Dec, Inc, Shift, Rot,
     Jump,  Jsr, Rti, Rts, CJump, Bit, Brk, Flag, Nop,
@@ -21,12 +21,12 @@ enum InsGrp {
 
 type FlagMod = u8;
 
-struct Opcode {
-    addr_m: AddrMode,
-    reg_m:  RegMod,
-    flag_m: FlagMod,
-    args:   u8,
-    ins:    InsGrp,
+pub struct Opcode {
+    pub addr_m: AddrMode,
+    pub reg_m:  RegMod,
+    pub flag_m: FlagMod,
+    pub args:   u8,
+    pub ins:    InsGrp,
 }
 
 macro_rules! Invalid_Opcode {
@@ -37,7 +37,7 @@ macro_rules! Invalid_Opcode {
 
 /* 6502 Documented Opcodes */
 
-const opcode_table: &'static [Opcode; 256] = &[  
+pub const opcode_table: &'static [Opcode; 256] = &[  
             /* 0x00 */ Opcode {addr_m: AddrMode::Impl,      reg_m: RegMod::None, flag_m: 0, args: 0, ins: InsGrp::Brk },
             /* 0x01 */ Opcode {addr_m: AddrMode::ZPIndX,    reg_m: RegMod::None, flag_m: 0, args: 0, ins: InsGrp::Or },
             /* 0x02 */ Invalid_Opcode!(),
