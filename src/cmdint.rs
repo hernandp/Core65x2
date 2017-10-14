@@ -1,5 +1,7 @@
 use std::io::*;
 use cpu;
+use cpu::opc6502;
+use cpu::opc6502::opcode_table;
 
 enum RegMod {
     PC,
@@ -85,6 +87,24 @@ pub fn exec(cmd: &Command, cpu: &mut cpu::Cpu) -> bool {
             rC = if cpu.is_flag_on(cpu::FLAG_CARRY) { '1' } else { '.' });
         },
         Command::Disasm => {
+            let mut current_addr = cpu.regs.PC;
+            for i in 0..10 {  
+                let opcode_byte = cpu.mem.read_byte(current_addr);
+                let opcode_data = &opcode_table[opcode_byte as usize];
+                let instr_len = cpu.get_instr_length(&opcode_data.addr_m);
+                
+                print!("{:04X}    {:02X}", current_addr, opcode_byte);
+                for j in 0..2 {
+                    if j < instr_len - 1 {
+                        print!("{:02X} ", cpu.mem.read_byte(current_addr + j as u16));
+                    } 
+                    else {
+                        print!("   ");
+                    }
+                }        
+                print!("{}\n",opcode_data.name);
+                current_addr += instr_len as u16;
+            }
 
         }
         Command::Quit => { return false; },
