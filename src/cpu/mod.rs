@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests;
-mod opc6502;
+pub mod opc6502;
 
 use super::mem::Memory;
 use self::opc6502::opcode_table;
@@ -27,10 +27,6 @@ const VECTOR_NMI: u16 = 0xFFFA;
 const VECTOR_RESET:u16= 0xFFFC;
 const VECTOR_IRQ_BRK:  u16= 0xFFFE;
 
-//
-// Instruction operands
-//
-type Operands = (u8, Option<u8>);
 
 //
 // Addressing mode modifier for opcodes
@@ -86,7 +82,7 @@ pub struct Regs {
 
 pub struct Cpu<'a> {
     pub regs: Regs,
-    mem: &'a mut Memory,
+    pub mem: &'a mut Memory,
     clk_count: u64,
 }
 
@@ -165,6 +161,22 @@ impl<'a> Cpu<'a> {
         clk
     }
 
+    // Gets instruction length by addressing mode
+    //
+    pub fn get_instr_length(&self, addrm: &AddrMode) -> u32 {
+        match *addrm {
+            AddrMode::Imm |
+            AddrMode::ZP |
+            AddrMode::ZPX |
+            AddrMode::ZPY |
+            AddrMode::ZPIndX |
+            AddrMode::ZPIndY |
+            AddrMode::Rel => 2,
+            AddrMode::Abs | AddrMode::AbsX | AddrMode::AbsY | AddrMode::Ind => 3,
+            _ => 1
+        }
+    }
+
     //
     // Fetch instruction, and updates program counter
     //
@@ -177,29 +189,13 @@ impl<'a> Cpu<'a> {
     //
     // Fetch operands, updating program counter
     //
-    fn fetch_op(&mut self, addr_mode: &AddrMode) -> Option<Operands> {
-        let operands: Option<Operands>;
-        match *addr_mode {
-            AddrMode::Imm |
-            AddrMode::ZP |
-            AddrMode::ZPX |
-            AddrMode::ZPY |
-            AddrMode::ZPIndX |
-            AddrMode::ZPIndY |
-            AddrMode::Rel => {
-                operands = Some((self.mem.read_byte(self.regs.PC), None));
-                self.regs.PC += 1;
-            }
-            AddrMode::Abs | AddrMode::AbsX | AddrMode::AbsY | AddrMode::Ind => {
-                operands = Some((
-                    self.mem.read_byte(self.regs.PC),
-                    Some(self.mem.read_byte(self.regs.PC + 1)),
-                ));
-                self.regs.PC += 2;
-            }
-            _ => {
-                operands = None;
-            }
+    fn fetch_op(&mut self, addr_mode: &AddrMode) -> Vec<u8> {
+        let mut operands: Vec<u8> = Vec::new();
+        let num_operands = self.get_instr_length(addr_mode) - 1;
+        
+        for i in 0..num_operands {
+            operands.push(self.mem.read_byte(self.regs.PC));
+            self.regs.PC +=1;
         }
         operands
     }
@@ -284,7 +280,8 @@ impl<'a> Cpu<'a> {
         ((b1 as u16) << 8) | (b0 as u16)
     }
 
-    fn calc_eff_addr(&self, insgrp: &InsMemAccess, addr_mode: &AddrMode, ops: &Operands) -> EAResult {
+    fn calc_eff_addr(&self, insgrp: &InsMemAccess, addr_mode: &AddrMode, 
+                     ops: &Vec<u8>) -> EAResult {
         match *addr_mode {
             AddrMode::Imm | AddrMode::Impl => {
                 EAResult {
@@ -293,7 +290,7 @@ impl<'a> Cpu<'a> {
                 }
             }
             AddrMode::ZP => EAResult {
-                addr: (*ops).0 as u16,
+                addr: ops[0] as u16,
                 clk_count: match *insgrp {
                     InsMemAccess::Read | InsMemAccess::Write => 3,
                     InsMemAccess::ReadWrite => 5,
@@ -301,7 +298,7 @@ impl<'a> Cpu<'a> {
                 },
             },
             AddrMode::ZPX => EAResult {
-                addr: (*ops).0.wrapping_add(self.regs.X) as u16,
+                addr: ops[0].wrapping_add(self.regs.X) as u16,
                 clk_count: match *insgrp {
                     InsMemAccess::Read | InsMemAccess::Write => 4,
                     InsMemAccess::ReadWrite => 6,
@@ -309,7 +306,7 @@ impl<'a> Cpu<'a> {
                 },
             },
             AddrMode::ZPY => EAResult {
-                addr: (*ops).0.wrapping_add(self.regs.Y) as u16,
+                addr: ops[0].wrapping_add(self.regs.Y) as u16,
                 clk_count: match *insgrp {
                     InsMemAccess::Read | InsMemAccess::Write => 4,
                     InsMemAccess::ReadWrite => 6,
@@ -317,7 +314,7 @@ impl<'a> Cpu<'a> {
                 },
             },
             AddrMode::Abs => EAResult {
-                addr: self.addr_from_2b((*ops).0, (*ops).1.unwrap()),
+                addr: self.addr_from_2b(ops[0], ops[1]),
                 clk_count: match *insgrp {
                     InsMemAccess::Jump => 3,
                     InsMemAccess::Read | InsMemAccess::Write => 4,
@@ -326,13 +323,13 @@ impl<'a> Cpu<'a> {
             },
             AddrMode::AbsX => {
                 let mut page_cross_clk = 0;
-                if (self.regs.X).overflowing_add((*ops).0).1 {
+                if (self.regs.X).overflowing_add(ops[0]).1 {
                     page_cross_clk = 1;
                 };
 
                 EAResult {
                     addr: (self.regs.X as u16)
-                        .wrapping_add(self.addr_from_2b((*ops).0, (*ops).1.unwrap())),
+                        .wrapping_add(self.addr_from_2b(ops[0], ops[1])),
 
                     clk_count: match *insgrp {
                         InsMemAccess::Read => 4 + page_cross_clk,
@@ -344,12 +341,12 @@ impl<'a> Cpu<'a> {
             }
             AddrMode::AbsY => {
                 let mut page_cross_clk = 0;
-                if (self.regs.Y).overflowing_add((*ops).0).1 {
+                if (self.regs.Y).overflowing_add(ops[0]).1 {
                     page_cross_clk = 1;
                 };
                 EAResult {
                     addr: (self.regs.Y as u16)
-                        .wrapping_add(self.addr_from_2b((*ops).0, (*ops).1.unwrap())),
+                        .wrapping_add(self.addr_from_2b(ops[0], ops[1])),
                     clk_count: match *insgrp {
                         InsMemAccess::Read => 4 + page_cross_clk,
                         InsMemAccess::Write => 5,
@@ -361,9 +358,9 @@ impl<'a> Cpu<'a> {
             AddrMode::ZPIndX => EAResult {
                 addr: self.addr_from_2b(
                     self.mem
-                        .read_byte((self.regs.X.wrapping_add((*ops).0)) as u16),
+                        .read_byte(self.regs.X.wrapping_add(ops[0]) as u16),
                     self.mem
-                        .read_byte((self.regs.X.wrapping_add(1).wrapping_add((*ops).0)) as u16),
+                        .read_byte(self.regs.X.wrapping_add(1).wrapping_add(ops[0]) as u16)
                 ),
                 clk_count: match *insgrp {
                     InsMemAccess::Read | InsMemAccess::Write => 6,
@@ -373,8 +370,8 @@ impl<'a> Cpu<'a> {
             },
             AddrMode::ZPIndY => {
                 let indirect_addr = self.addr_from_2b(
-                    self.mem.read_byte((*ops).0 as u16),
-                    self.mem.read_byte((*ops).0.wrapping_add(1) as u16),
+                    self.mem.read_byte(ops[0] as u16),
+                    self.mem.read_byte(ops[0].wrapping_add(1) as u16)
                 );
 
                 let mut page_cross_clk = 0;
@@ -396,7 +393,7 @@ impl<'a> Cpu<'a> {
                 }
             }
             AddrMode::Ind => {
-                let indirect_addr = self.addr_from_2b((*ops).0, (*ops).1.unwrap());
+                let indirect_addr = self.addr_from_2b(ops[0], ops[1]);
                 EAResult {
                     addr: self.addr_from_2b(
                         self.mem.read_byte(indirect_addr),
@@ -408,7 +405,7 @@ impl<'a> Cpu<'a> {
             AddrMode::Rel => {
                 // TODO
                 EAResult {
-                    addr: self.regs.PC + (*ops).0 as u16,
+                    addr: self.regs.PC + ops[0] as u16,
                     clk_count: 5,
                 }
             }
@@ -450,9 +447,9 @@ impl<'a> Cpu<'a> {
 
     fn op_load(&mut self, addr_mode: &AddrMode, src_reg: &RegMod) -> u64 {
         let ops = self.fetch_op(addr_mode);
-        let ea: EAResult = self.calc_eff_addr(&InsMemAccess::Read, addr_mode, &ops.unwrap());
+        let ea: EAResult = self.calc_eff_addr(&InsMemAccess::Read, addr_mode, &ops);
         let v = match *addr_mode {
-            AddrMode::Imm => ops.unwrap().0,
+            AddrMode::Imm => ops[0],
             _ => self.mem.read_byte(ea.addr),
         };
 
@@ -464,7 +461,7 @@ impl<'a> Cpu<'a> {
 
     fn op_store(&mut self, addr_mode: &AddrMode, dst_reg: &RegMod) -> u64 {
         let ops = self.fetch_op(addr_mode);
-        let ea: EAResult = self.calc_eff_addr(&InsMemAccess::Write, addr_mode, &ops.unwrap());
+        let ea: EAResult = self.calc_eff_addr(&InsMemAccess::Write, addr_mode, &ops);
         let v = self.read_register(dst_reg);
         self.mem.write_byte(ea.addr, v);
         ea.clk_count
@@ -479,7 +476,7 @@ impl<'a> Cpu<'a> {
 
     fn op_or(&mut self, addr_mode: &AddrMode) -> u64 {
         let ops = self.fetch_op(addr_mode);
-        let ea: EAResult = self.calc_eff_addr(&InsMemAccess::ReadWrite, addr_mode, &ops.unwrap());
+        let ea: EAResult = self.calc_eff_addr(&InsMemAccess::ReadWrite, addr_mode, &ops);
         let v = self.mem.read_byte(ea.addr);
         self.mem.write_byte(ea.addr, v | self.regs.A);
         self.set_nz_flags(FLAG_SIGN | FLAG_ZERO, v);
@@ -488,7 +485,7 @@ impl<'a> Cpu<'a> {
 
     fn op_and(&mut self, addr_mode: &AddrMode) -> u64 {
         let ops = self.fetch_op(addr_mode);
-        let ea: EAResult = self.calc_eff_addr(&InsMemAccess::ReadWrite, addr_mode, &ops.unwrap());
+        let ea: EAResult = self.calc_eff_addr(&InsMemAccess::ReadWrite, addr_mode, &ops);
         let v = self.mem.read_byte(ea.addr);
         self.mem.write_byte(ea.addr, v & self.regs.A);
         self.set_nz_flags(FLAG_SIGN | FLAG_ZERO, v);
@@ -497,7 +494,7 @@ impl<'a> Cpu<'a> {
 
     fn op_xor(&mut self, addr_mode: &AddrMode) -> u64 {
         let ops = self.fetch_op(addr_mode);
-        let ea: EAResult = self.calc_eff_addr(&InsMemAccess::ReadWrite, addr_mode, &ops.unwrap());
+        let ea: EAResult = self.calc_eff_addr(&InsMemAccess::ReadWrite, addr_mode, &ops);
         let v = self.mem.read_byte(ea.addr);
         self.mem.write_byte(ea.addr, v ^ self.regs.A);
         self.set_nz_flags(FLAG_SIGN | FLAG_ZERO, v);
@@ -506,9 +503,9 @@ impl<'a> Cpu<'a> {
 
     fn op_adc(&mut self, addr_mode: &AddrMode) -> u64 {
         let ops = self.fetch_op(addr_mode);
-        let ea: EAResult = self.calc_eff_addr(&InsMemAccess::Read, addr_mode, &ops.unwrap());
+        let ea: EAResult = self.calc_eff_addr(&InsMemAccess::Read, addr_mode, &ops);
         let v = match *addr_mode {
-            AddrMode::Imm => ops.unwrap().0,
+            AddrMode::Imm => ops[0],
             _ => self.mem.read_byte(ea.addr),
         };
         
@@ -530,9 +527,9 @@ impl<'a> Cpu<'a> {
 
     fn op_sbc(&mut self, addr_mode: &AddrMode) -> u64 {
         let ops = self.fetch_op(addr_mode);
-        let ea: EAResult = self.calc_eff_addr(&InsMemAccess::Read, addr_mode, &ops.unwrap());
+        let ea: EAResult = self.calc_eff_addr(&InsMemAccess::Read, addr_mode, &ops);
         let v = match *addr_mode {
-            AddrMode::Imm => ops.unwrap().0,
+            AddrMode::Imm => ops[0],
             _ => self.mem.read_byte(ea.addr),
         };
         
@@ -554,9 +551,9 @@ impl<'a> Cpu<'a> {
 
     fn op_cmp(&mut self, addr_mode: &AddrMode, src_reg: &RegMod) -> u64 {
         let ops = self.fetch_op(addr_mode);
-        let ea: EAResult = self.calc_eff_addr(&InsMemAccess::Read, addr_mode, &ops.unwrap());
+        let ea: EAResult = self.calc_eff_addr(&InsMemAccess::Read, addr_mode, &ops);
         let v = match *addr_mode {
-            AddrMode::Imm => ops.unwrap().0,
+            AddrMode::Imm => ops[0],
             _ => self.mem.read_byte(ea.addr),
         };
         
@@ -571,7 +568,7 @@ impl<'a> Cpu<'a> {
 
     fn op_dec(&mut self, addr_mode: &AddrMode, dst_reg: &RegMod) -> u64 {
         let ops = self.fetch_op(addr_mode);
-        let ea: EAResult = self.calc_eff_addr(&InsMemAccess::ReadWrite, addr_mode, &ops.unwrap());
+        let ea: EAResult = self.calc_eff_addr(&InsMemAccess::ReadWrite, addr_mode, &ops);
         let v = self.mem.read_byte(ea.addr);
         self.mem.write_byte(ea.addr, v.wrapping_sub(1));
         self.set_nz_flags(FLAG_SIGN | FLAG_ZERO, v);
@@ -580,7 +577,7 @@ impl<'a> Cpu<'a> {
 
     fn op_inc(&mut self, addr_mode: &AddrMode, dst_reg: &RegMod) -> u64 {
         let ops = self.fetch_op(addr_mode);
-        let ea: EAResult = self.calc_eff_addr(&InsMemAccess::ReadWrite, addr_mode, &ops.unwrap());
+        let ea: EAResult = self.calc_eff_addr(&InsMemAccess::ReadWrite, addr_mode, &ops);
         let v = self.mem.read_byte(ea.addr);
         self.mem.write_byte(ea.addr, v.wrapping_add(1));
         self.set_nz_flags(FLAG_SIGN | FLAG_ZERO, v);
@@ -635,7 +632,7 @@ impl<'a> Cpu<'a> {
 
     fn op_jmp(&mut self, addr_mode: &AddrMode) -> u64 {
         let ops = self.fetch_op(addr_mode);
-        let ea: EAResult = self.calc_eff_addr(&InsMemAccess::Jump, addr_mode, &ops.unwrap());
+        let ea: EAResult = self.calc_eff_addr(&InsMemAccess::Jump, addr_mode, &ops);
         self.regs.PC = ea.addr;
         ea.clk_count
     }
