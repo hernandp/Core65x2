@@ -1,4 +1,6 @@
 use std::io::*;
+use std::fs::*;
+use std::path::Path;
 use cpu;
 use cpu::opc6502;
 use cpu::opc6502::opcode_table;
@@ -15,7 +17,7 @@ enum RegMod {
 #[derive(PartialEq)]
 pub enum Command {
     Asm,
-    Disasm,
+    Disasm { start_addr: Option<u16>, length: Option<u16> },
     Mem,
     Go,
     Load(String),
@@ -38,9 +40,7 @@ pub fn do_prompt() -> Command {
         let cmdentry = line.chars().next();
         let cmdch = cmdentry.unwrap().to_uppercase().next(); 
         let args =  line.split_off(1);
-        let argvec: Vec<&str> = args.trim().split(",").collect();
-
-        println!("{:?}", argvec);
+        let argvec: Vec<&str> = if args.len() == 0 { Vec::new() } else { args.trim().split(",").collect() };
                 
         match cmdch {
             Some('Q') => {
@@ -64,12 +64,45 @@ pub fn do_prompt() -> Command {
                     }
                 }
             }
-            Some('A') => { return Command::Asm; }
-            Some('D') => { return Command::Disasm; }
-            
-            Some('G') => { return Command::Go;  }
-            Some('L') => { /*return Command::Load("x"); */}
-            Some('R') => { return Command::Reg; }
+            Some('A') => return Command::Asm,
+            Some('D') => {
+                if argvec.len() > 0 {
+                    if argvec[0] == "?" {
+                        println!("D[start_address][,len]\tDisassemble\n");
+                        println!("start_address\t\tThe memory address where disassembly starts. ");
+                        println!("             \t\tIf unspecified, current program counter is assumed.");
+                        println!("len          \t\tLength in bytes to dissasemble. Default is 32.");
+                        return Command::Null
+                    }
+                }
+                let start: Option<u16> = if argvec.len() > 0 { Some(argvec[0].parse::<u16>().unwrap()) } else { None };
+                let len: Option<u16> = if argvec.len() == 2 { Some(argvec[1].parse::<u16>().unwrap()) } else { None};
+           
+                return Command::Disasm { start_addr: start, length: len };
+            },
+            Some('G') => return Command::Go,
+            Some('L') => { 
+                 if argvec.len() > 0 {
+                    if argvec[0] == "?" {
+                        println!("L[filename][,addr]\tLoad program in memory\n");
+                        println!("filename\t\tBinary image with code to load. Should not exceed 64K.");
+                        println!("addr    \t\tAddress where the code is going to be located.");
+                        return Command::Null
+                    }
+                }
+                if argvec.len() == 0 {
+                    println!("?Filename not specified  error");
+                    return Command::Null;
+                }
+
+                if Path::new(argvec[0]).exists() == false {
+                    println!("?Cannot open file:  {} ", argvec[0]);
+                    return Command::Null;
+                }
+              
+                return Command::Load(String::from(argvec[1]));
+            },
+            Some('R') => return Command::Reg,
             
             Some('?') => println!("Help"),
             _ => println!("?"),
@@ -96,7 +129,7 @@ pub fn exec(cmd: &Command, cpu: &mut cpu::Cpu) -> bool {
             rZ = if cpu.is_flag_on(cpu::FLAG_ZERO) { '1' } else { '.' },
             rC = if cpu.is_flag_on(cpu::FLAG_CARRY) { '1' } else { '.' });
         },
-        Command::Disasm => {
+        Command::Disasm { start_addr, length } => {
             let mut current_addr = cpu.regs.PC;
             for i in 0..10 {  
                 let opcode_byte = cpu.mem.read_byte(current_addr);
@@ -116,6 +149,9 @@ pub fn exec(cmd: &Command, cpu: &mut cpu::Cpu) -> bool {
                 current_addr += instr_len as u16;
             }
 
+        },
+        Command::Load(ref filename) => {
+                        
         }
         Command::Quit => { return false; },
         _ => {}
