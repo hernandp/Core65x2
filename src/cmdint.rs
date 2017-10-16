@@ -18,6 +18,7 @@ pub enum Command {
     Disasm,
     Mem,
     Go,
+    Load(String),
     Null,
     Quit,
     Reg,    
@@ -34,8 +35,14 @@ pub fn do_prompt() -> Command {
 
     line = String::from(line.trim());
     if line.len() > 0 {
-        let cmdch = line.chars().next();
-        match cmdch.unwrap().to_uppercase().next() {
+        let cmdentry = line.chars().next();
+        let cmdch = cmdentry.unwrap().to_uppercase().next(); 
+        let args =  line.split_off(1);
+        let argvec: Vec<&str> = args.trim().split(",").collect();
+
+        println!("{:?}", argvec);
+                
+        match cmdch {
             Some('Q') => {
                 print!("Do you want to quit (Y/N)?");
                 stdout().flush().unwrap();
@@ -57,10 +64,13 @@ pub fn do_prompt() -> Command {
                     }
                 }
             }
-            Some('R') => { return Command::Reg; }
             Some('A') => { return Command::Asm; }
-            Some('G') => { return Command::Go;  }
             Some('D') => { return Command::Disasm; }
+            
+            Some('G') => { return Command::Go;  }
+            Some('L') => { /*return Command::Load("x"); */}
+            Some('R') => { return Command::Reg; }
+            
             Some('?') => println!("Help"),
             _ => println!("?"),
         }
