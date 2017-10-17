@@ -18,6 +18,7 @@ enum RegMod {
 pub enum Command {
     Asm,
     Disasm { start_addr: Option<u16>, length: Option<u16> },
+    Enter,
     Mem,
     Go,
     Load(String),
@@ -80,6 +81,7 @@ pub fn do_prompt() -> Command {
            
                 return Command::Disasm { start_addr: start, length: len };
             },
+            Some('E') => return Command::Enter,
             Some('G') => return Command::Go,
             Some('L') => { 
                  if argvec.len() > 0 {
@@ -93,15 +95,11 @@ pub fn do_prompt() -> Command {
                 if argvec.len() == 0 {
                     println!("?Filename not specified  error");
                     return Command::Null;
-                }
-
-                if Path::new(argvec[0]).exists() == false {
-                    println!("?Cannot open file:  {} ", argvec[0]);
-                    return Command::Null;
-                }
+                }               
               
-                return Command::Load(String::from(argvec[1]));
+                return Command::Load(String::from(argvec[0]));
             },
+            Some('M') => return Command::Mem,
             Some('R') => return Command::Reg,
             
             Some('?') => println!("Help"),
@@ -131,28 +129,111 @@ pub fn exec(cmd: &Command, cpu: &mut cpu::Cpu) -> bool {
         },
         Command::Disasm { start_addr, length } => {
             let mut current_addr = cpu.regs.PC;
-            for i in 0..10 {  
+            for _ in 0..10 {  
                 let opcode_byte = cpu.mem.read_byte(current_addr);
                 let opcode_data = &opcode_table[opcode_byte as usize];
                 let instr_len = cpu.get_instr_length(&opcode_data.addr_m);
                 
-                print!("{:04X}    {:02X}", current_addr, opcode_byte);
-                for j in 0..2 {
-                    if j < instr_len - 1 {
+                print!("{:04X}    {:02X} ", current_addr, opcode_byte);
+                for j in 1..3 {
+                    if j < instr_len  {
                         print!("{:02X} ", cpu.mem.read_byte(current_addr + j as u16));
                     } 
                     else {
                         print!("   ");
                     }
                 }        
-                print!("{}\n",opcode_data.name);
+
+                let op0 = cpu.mem.read_byte(current_addr + 1 as u16);
+                let op1 = cpu.mem.read_byte(current_addr + 2 as u16);
+
+                print!("    {} {}\n",opcode_data.name,
+                match (*opcode_data).addr_m {
+                    cpu::AddrMode::Imm  => format!("#${:02X}", op0),
+                    cpu::AddrMode::ZP   => format!("${:02X}", op0),
+                    cpu::AddrMode::ZPX  => format!("${:02X},X", op0),
+                    cpu::AddrMode::ZPY  => format!("${:02X},Y", op0),
+                    cpu::AddrMode::Abs  => format!("${:02X}{:02X}", op1, op0),
+                    cpu::AddrMode::AbsX  => format!("${:02X}{:02X},X", op1, op0),
+                    cpu::AddrMode::AbsY  => format!("${:02X}{:02X},Y", op1, op0),
+                    cpu::AddrMode::ZPIndX=> format!("(${:02X},X)", op0),
+                    cpu::AddrMode::ZPIndY=> format!("(${:02X}),Y", op0),
+                    cpu::AddrMode::Rel   => format!("${:02X}", op0),
+                    cpu::AddrMode::Ind   => format!("(${:04X}{:04X})", op1, op0),
+                    cpu::AddrMode::Impl   => format!("")                    
+                });
                 current_addr += instr_len as u16;
             }
 
         },
+        Command::Mem => {
+            let mut current_addr = cpu.regs.PC;
+            for _ in 0..8 {
+                print!("{:04X}  ", current_addr);
+                for i in 0..8 {                    
+                    print!("{:02X} ", cpu.mem.read_byte(current_addr + i));
+                }
+                for i in 0..8 {                    
+                    print!(".");
+                    //print!("{}", cpu.mem.read_byte(current_addr + i));
+                }
+                println!("");
+                current_addr += 8;
+            }
+        },
         Command::Load(ref filename) => {
-                        
-        }
+            let binary_file = File::open(filename);
+            if binary_file.is_err()
+            {
+                println!("?Error opening file: {}", binary_file.err().unwrap())
+            }
+            else 
+            {
+                let mut buf: Vec<u8> = Vec::new();
+                let res = binary_file.unwrap().read_to_end(&mut buf);
+                if res.is_err()
+                {
+                    println!("?I/O Error: {}", res.err().unwrap());
+                }
+                else
+                {
+                    cpu.mem.write_vec(0, &buf);
+                    println!("Read {} bytes to address {:04X}", res.unwrap(), 0);
+                }
+            }
+        },
+        Command::Enter => {
+            let mut current_addr = cpu.regs.PC;
+            loop {
+                let mut entry = String::new();
+                print!("{:04X}: ", current_addr);
+                stdout().flush().unwrap();
+                stdin().read_line(&mut entry).expect("read_line from stdin failed");
+
+                entry = String::from(entry.trim());
+                if entry.len() > 0 {
+
+                    // Validate all entries first.
+                    let mut bytes: Vec<u8> = Vec::new();
+
+                    for e in entry.split(",").collect::<Vec<&str>>() {
+                        let res = u8::from_str_radix(e, 16);
+                        if res.is_err() {
+                            println!("?Invalid byte entry: {}", e);
+                        } 
+                        else {
+                            bytes.push(res.unwrap());
+                        }
+                    }
+
+                    cpu.mem.write_vec(current_addr, &bytes);
+                    current_addr += bytes.len() as u16;
+                }
+                else {
+                    break;
+                }
+            }
+        },
         Command::Quit => { return false; },
         _ => {}
     }
