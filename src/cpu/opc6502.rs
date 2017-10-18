@@ -1,5 +1,4 @@
 use cpu::AddrMode;
-use cpu::RegMod;
 use cpu::{ FLAG_CARRY, FLAG_DEC, FLAG_INTR, FLAG_OF, FLAG_SIGN, FLAG_ZERO};
 
 pub struct Opcode {

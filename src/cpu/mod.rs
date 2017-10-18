@@ -265,28 +265,6 @@ impl<'a> Cpu<'a> {
         self.regs.PC += num_operands as u16;
     }
 
-    fn write_register(&mut self, dst_reg: &RegMod, v: u8) {
-        match *dst_reg {
-            RegMod::A => self.regs.A = v,
-            RegMod::X => self.regs.X = v,
-            RegMod::Y => self.regs.Y = v,
-            RegMod::SR => self.regs.SR = v,
-            RegMod::SP => self.regs.SP = v,
-            _ => panic!("invalid Reg modifier"),
-        };
-    }
-
-    fn read_register(&self, src_reg: &RegMod) -> u8 {
-        match *src_reg {
-            RegMod::A => self.regs.A,
-            RegMod::X => self.regs.X,
-            RegMod::Y => self.regs.Y,
-            RegMod::SR => self.regs.SR,
-            RegMod::SP => self.regs.SP,
-            _ => panic!("invalid Reg modifier"),
-        }
-    }
-
     pub fn is_flag_on(&self, flag: u8) -> bool {
         self.regs.SR & flag == flag
     }
