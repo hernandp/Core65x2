@@ -1,12 +1,11 @@
 use cpu::AddrMode;
-use cpu::{ FLAG_CARRY, FLAG_DEC, FLAG_INTR, FLAG_OF, FLAG_SIGN, FLAG_ZERO};
 
 pub enum Instr {
     INVALID, BRK, ORA, ASL, PHP, PLA, LDA, LDX, LDY, STA, STX, STY,
     CMP, CPX, CPY, DEC, DEX, DEY, INC, INX, INY, TSX, TXS, TAX, TXA,
     TYA, TAY, PLP, PHA, JMP, RTS, RTI, BNE, BCC, AND, EOR, BIT, SEC,
     CLI, CLC, SEI, BPL, ROL, ROR, LSR, SBC, ADC, BMI, BVC, CLD, BVS,
-    BCS, CLV, NOP, BEQ, SED
+    BCS, CLV, NOP, BEQ, SED, JSR
 }
 pub struct Opcode {
     pub ins:    Instr,
@@ -62,7 +61,7 @@ pub const OPCODE_TABLE: &'static [Opcode; 256] = &[
             /* 0x1D */ define_opcode!(ORA,  AddrMode::AbsX   ),
             /* 0x1E */ define_opcode!(ASL,  AddrMode::AbsX   ),
             /* 0x1F */ Invalid_Opcode!(),
-            /* 0x20 */ define_opcode!(PHP,  AddrMode::Impl   ),
+            /* 0x20 */ define_opcode!(JSR,  AddrMode::Abs    ),
             /* 0x21 */ define_opcode!(PHP,  AddrMode::ZPIndX ),
             /* 0x22 */ Invalid_Opcode!(),
             /* 0x23 */ Invalid_Opcode!(),

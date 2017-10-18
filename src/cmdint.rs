@@ -1,18 +1,7 @@
 use std::io::*;
 use std::fs::*;
-use std::path::Path;
 use cpu;
-use cpu::opc6502;
 use cpu::opc6502::OPCODE_TABLE;
-
-enum RegMod {
-    PC,
-    XR,
-    YR,
-    AC,
-    SP,
-    SR,
-}
 
 #[derive(PartialEq)]
 pub enum Command {

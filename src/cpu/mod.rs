@@ -130,9 +130,6 @@ impl<'a> Cpu<'a> {
         self.clk_count += CLK_TABLE[self.icd.opcode as usize];
 
         match OPCODE_TABLE[self.icd.opcode as usize].ins {
-            Instr::BRK => {
-                println!("BRK");
-            }
             Instr::LDA => {
                 let v = self.get_src_value(&addr_m);
                 self.set_nz_flags(v);
@@ -223,6 +220,81 @@ impl<'a> Cpu<'a> {
                 self.set_c_flag(cmps < 0x100);
                 self.set_nz_flags(cmps as u8);
             }
+            Instr::CPX => {
+                let v = self.get_src_value(&addr_m);
+                let cmps: u16 = v as u16 - self.regs.X as u16;
+                self.set_c_flag(cmps < 0x100);
+                self.set_nz_flags(cmps as u8);
+            }
+            Instr::CPY => {
+                let v = self.get_src_value(&addr_m);
+                let cmps: u16 = v as u16 - self.regs.Y as u16;
+                self.set_c_flag(cmps < 0x100);
+                self.set_nz_flags(cmps as u8);
+            }
+            Instr::AND => {
+                let v = self.get_src_value(&addr_m) & self.regs.A;
+                self.set_nz_flags(v);
+                self.regs.A = v;
+            }
+            Instr::EOR => {
+                let v = self.get_src_value(&addr_m) ^ self.regs.A;
+                self.set_nz_flags(v);
+                self.regs.A = v;
+            }
+            Instr::ORA => {
+                let v = self.get_src_value(&addr_m) | self.regs.A;
+                self.set_nz_flags(v);
+                self.regs.A = v;
+            }
+            Instr::JSR => {  
+                let pch: u8 = ((self.regs.PC - 1) >> 8) as u8;
+                let pcl: u8 = ((self.regs.PC - 1) & 0xFF) as u8;
+                self.push_stack(pch);
+                self.push_stack(pcl);
+                self.regs.PC = self.icd.ea;
+            }
+            Instr::RTS => {
+                let pcl: u8 = self.pop_stack();
+                let pch: u8 = self.pop_stack();
+                self.regs.PC = (((pch as u16) << 8) | pcl as u16).wrapping_add(1);
+            }
+            Instr::BRK => {
+                self.regs.PC += 1;
+                let retaddrh: u8 = (self.regs.PC >> 8) as u8;
+                let retaddrl: u8 = (self.regs.PC & 0xFF) as u8;
+                self.push_stack(retaddrh);
+                self.push_stack(retaddrl);
+                self.set_b_flag(true);
+                let sr = self.regs.SR;
+                self.push_stack(sr);
+                self.set_i_flag(true);    
+                self.regs.PC = self.addr_from_2b(self.mem.read_byte(VECTOR_RESET), self.mem.read_byte(VECTOR_RESET + 1));
+            }
+            Instr::RTI => {
+                self.regs.SR = self.pop_stack();
+                let retaddrl = self.pop_stack();
+                let retaddrh = self.pop_stack();
+                self.regs.PC = ((retaddrh as u16) << 8) | retaddrl as u16;
+            }
+            Instr::PLA => {
+                let v = self.pop_stack();
+                self.regs.A = v;
+                self.set_nz_flags(v);
+            }
+            Instr::PHA => {
+                let v = self.regs.A;
+                self.push_stack(v);
+            }
+            Instr::PLP => {
+                let v = self.pop_stack();
+                self.regs.SR = v;
+                self.set_nz_flags(v);                
+            }
+            Instr::PHP => {
+                let v = self.regs.SR;
+                self.push_stack(v);                
+            }
             _ => {
                 
             }
@@ -289,6 +361,22 @@ impl<'a> Cpu<'a> {
             self.regs.SR |= FLAG_CARRY;
         } else {
             self.regs.SR &= !FLAG_CARRY;
+        }
+    }
+
+    fn set_b_flag(&mut self, v: bool ) {
+        if v == false {
+            self.regs.SR |= FLAG_BRK;
+        } else {
+            self.regs.SR &= !FLAG_BRK;
+        }
+    }
+
+    fn set_i_flag(&mut self, v: bool ) {
+        if v == false {
+            self.regs.SR |= FLAG_INTR;
+        } else {
+            self.regs.SR &= !FLAG_INTR;
         }
     }
 
