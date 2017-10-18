@@ -96,6 +96,9 @@ pub struct Cpu<'a> {
     icd: InstrCycleData, 
 }
 
+// macro_rules! set_zf { ($v:expr) => ( if $v == 0 { self.regs.SR |= FLAG_ZERO; } else { self.regs.SR &= !FLAG_ZERO; } ) }
+// macro_rules! set_nf { ($v:expr) => ( if $v & 0x80 == 0x80 { self.regs.SR |= FLAG_SIGN; } else { self.regs.SR &= !FLAG_SIGN; } ) }
+
 impl<'a> Cpu<'a> {
     //
     // Initialize processor
@@ -121,6 +124,7 @@ impl<'a> Cpu<'a> {
         }
     }
 
+
     // 
     // Do the RESET cycle for the emulated processor
     //
@@ -144,24 +148,77 @@ impl<'a> Cpu<'a> {
         self.fetch_op(&addr_m);
         self.calc_eff_addr(&addr_m);
 
+        // Add up clock cycles for execution
+
+        self.clk_count += CLK_TABLE[self.icd.opcode as usize];
+
+
         match OPCODE_TABLE[self.icd.opcode as usize].name {
+
             "BRK" => {
                 println!("BRK");
             }
             "LDA" => {
-                println!("LDA");
-            }
+                 let v = self.get_src_value(&addr_m);
+                 self.set_s_flag(v);
+                 self.set_z_flag(v);
+                 self.regs.A = v;
+            },
             "LDX" => {
-                println!("LDX");
-            }
+                let v = self.get_src_value(&addr_m);
+                self.set_s_flag(v);
+                self.set_z_flag(v);
+                self.regs.X = v;
+            },
+            "LDY" => {
+                let v = self.get_src_value(&addr_m);
+                self.set_s_flag(v);
+                self.set_z_flag(v);
+                self.regs.Y = v;
+            },
+            "STA" => self.mem.write_byte(self.icd.ea, self.regs.A),
+            "STX" => self.mem.write_byte(self.icd.ea, self.regs.X),
+            "STY" => self.mem.write_byte(self.icd.ea, self.regs.Y),
+            "TXA" => { 
+                let v = self.regs.X;
+                self.regs.A = v; 
+                self.set_s_flag(v);
+                self.set_z_flag(v);
+            },
+            "TAX" => { 
+                let v = self.regs.A;
+                self.regs.X = v;
+                self.set_s_flag(v);
+                self.set_z_flag(v);
+            },
+            "TYA" => { 
+                let v = self.regs.A;
+                self.regs.Y = v;
+                self.set_s_flag(v);
+                self.set_z_flag(v);
+            },
+            "TAY" => { 
+                let v = self.regs.Y;
+                self.regs.A = v; 
+                self.set_s_flag(v);
+                self.set_z_flag(v);
+            },
+            "TSX" => { 
+                let v = self.regs.X;
+                self.regs.X = v;
+                self.set_s_flag(v);
+                self.set_z_flag(v); 
+            },
+            "TXS" => {
+                let v = self.regs.SP;
+                self.regs.SP = v;
+                self.set_s_flag(v);
+                self.set_z_flag(v);
+            },
             _ => {
                 println!("OTHER");
             }
         }
-
-        // Add up clock cycles for execution
-
-        self.clk_count += CLK_TABLE[self.icd.opcode as usize];
 
 
 /*
@@ -322,8 +379,8 @@ impl<'a> Cpu<'a> {
 
     fn calc_eff_addr(&mut self, addr_mode: &AddrMode) {
         match *addr_mode {
-            AddrMode::Acc | AddrMode::Imm => {},
-            AddrMode::Impl => self.icd.ea = self.regs.PC + 1,
+            AddrMode::Acc | AddrMode::Impl => {},
+            AddrMode::Imm =>  self.icd.ea = self.regs.PC + 1,
             AddrMode::ZP =>   self.icd.ea = self.icd.op0 as u16,
             AddrMode::ZPX =>  self.icd.ea = self.icd.op0.wrapping_add(self.regs.X) as u16,
             AddrMode::ZPY =>  self.icd.ea = self.icd.op0.wrapping_add(self.regs.Y) as u16,
@@ -384,18 +441,20 @@ impl<'a> Cpu<'a> {
         self.mem.read_byte(self.regs.SP as u16)
     }
 
+    fn get_src_value(&self, addr_mode: &AddrMode) -> u8 {
+        match *addr_mode {
+            AddrMode::Acc => self.regs.A,
+            _ => self.mem.read_byte(self.icd.ea),
+        }
+    }
+
     // -----------------------------------------------------------------------------------------------------
     //
     // Opcode implementations
     //
     // -----------------------------------------------------------------------------------------------------
 /*
-    fn get_src_value(&self, addr_mode: &AddrMode, src_addr: u16) -> u8 {
-        match *addr_mode {
-            AddrMode::Acc => self.regs.A,
-            _ => self.mem.read_byte(src_addr),
-        }
-    }
+    
 
     fn op_load(&mut self, addr_mode: &AddrMode, src_reg: &RegMod) -> u64 {
         // let ops = self.fetch_op(addr_mode);
