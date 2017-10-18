@@ -3,7 +3,7 @@ use std::fs::*;
 use std::path::Path;
 use cpu;
 use cpu::opc6502;
-use cpu::opc6502::opcode_table;
+use cpu::opc6502::OPCODE_TABLE;
 
 enum RegMod {
     PC,
@@ -131,7 +131,7 @@ pub fn exec(cmd: &Command, cpu: &mut cpu::Cpu) -> bool {
             let mut current_addr = cpu.regs.PC;
             for _ in 0..10 {  
                 let opcode_byte = cpu.mem.read_byte(current_addr);
-                let opcode_data = &opcode_table[opcode_byte as usize];
+                let opcode_data = &OPCODE_TABLE[opcode_byte as usize];
                 let instr_len = cpu.get_instr_length(&opcode_data.addr_m);
                 
                 print!("{:04X}    {:02X} ", current_addr, opcode_byte);
@@ -149,6 +149,7 @@ pub fn exec(cmd: &Command, cpu: &mut cpu::Cpu) -> bool {
 
                 print!("    {} {}\n",opcode_data.name,
                 match (*opcode_data).addr_m {
+                    cpu::AddrMode::Acc =>  format!("A"),
                     cpu::AddrMode::Imm  => format!("#${:02X}", op0),
                     cpu::AddrMode::ZP   => format!("${:02X}", op0),
                     cpu::AddrMode::ZPX  => format!("${:02X},X", op0),
