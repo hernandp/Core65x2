@@ -5,6 +5,7 @@ pub mod opc6502;
 use super::mem::Memory;
 use self::opc6502::OPCODE_TABLE;
 use self::opc6502::CLK_TABLE;
+use self::opc6502::Instr;
 
 const STACK_ADDR_BASE: u16 = 0x01FF;
 const STACK_ADDR_LIMIT: u16 = 0x0100;
@@ -72,9 +73,6 @@ pub struct Cpu<'a> {
     icd: InstrCycleData,
 }
 
-// macro_rules! set_zf { ($v:expr) => ( if $v == 0 { self.regs.SR |= FLAG_ZERO; } else { self.regs.SR &= !FLAG_ZERO; } ) }
-// macro_rules! set_nf { ($v:expr) => ( if $v & 0x80 == 0x80 { self.regs.SR |= FLAG_SIGN; } else { self.regs.SR &= !FLAG_SIGN; } ) }
-
 impl<'a> Cpu<'a> {
     //
     // Initialize processor
@@ -131,102 +129,102 @@ impl<'a> Cpu<'a> {
 
         self.clk_count += CLK_TABLE[self.icd.opcode as usize];
 
-        match OPCODE_TABLE[self.icd.opcode as usize].name {
-            "BRK" => {
+        match OPCODE_TABLE[self.icd.opcode as usize].ins {
+            Instr::BRK => {
                 println!("BRK");
             }
-            "LDA" => {
+            Instr::LDA => {
                 let v = self.get_src_value(&addr_m);
                 self.set_nz_flags(v);
                 self.regs.A = v;
             }
-            "LDX" => {
+            Instr::LDX => {
                 let v = self.get_src_value(&addr_m);
                 self.set_nz_flags(v);
                 self.regs.X = v;
             }
-            "LDY" => {
+            Instr::LDY => {
                 let v = self.get_src_value(&addr_m);
                 self.set_nz_flags(v);
                 self.regs.Y = v;
             }
-            "STA" => self.mem.write_byte(self.icd.ea, self.regs.A),
-            "STX" => self.mem.write_byte(self.icd.ea, self.regs.X),
-            "STY" => self.mem.write_byte(self.icd.ea, self.regs.Y),
-            "TXA" => {
+            Instr::STA => self.mem.write_byte(self.icd.ea, self.regs.A),
+            Instr::STX => self.mem.write_byte(self.icd.ea, self.regs.X),
+            Instr::STY => self.mem.write_byte(self.icd.ea, self.regs.Y),
+            Instr::TXA => {
                 let v = self.regs.X;
                 self.regs.A = v;
                 self.set_nz_flags(v);
             }
-            "TAX" => {
+            Instr::TAX => {
                 let v = self.regs.A;
                 self.regs.X = v;
                 self.set_nz_flags(v);
             }
-            "TYA" => {
+            Instr::TYA => {
                 let v = self.regs.A;
                 self.regs.Y = v;
                 self.set_nz_flags(v);
             }
-            "TAY" => {
+            Instr::TAY => {
                 let v = self.regs.Y;
                 self.regs.A = v;
                 self.set_nz_flags(v);
             }
-            "TSX" => {
+            Instr::TSX => {
                 let v = self.regs.X;
                 self.regs.X = v;
                 self.set_nz_flags(v);
             }
-            "TXS" => {
+            Instr::TXS => {
                 let v = self.regs.SP;
                 self.regs.SP = v;
                 self.set_nz_flags(v);
             }
-            "DEC" => {
+            Instr::DEC => {
                 let v = self.get_src_value(&addr_m).wrapping_sub(1);
                 self.set_nz_flags(v);
                 self.mem.write_byte(self.icd.ea, v);
             }
-            "DEX" => {
+            Instr::DEX => {
                 let v = self.regs.X.wrapping_sub(1);
                 self.set_nz_flags(v);
                 self.regs.X = v;
             }
-            "DEY" => {
+            Instr::DEY => {
                 let v = self.regs.Y.wrapping_sub(1);
                 self.set_nz_flags(v);
                 self.regs.Y = v;
             }
-            "INC" => {
+            Instr::INC => {
                 let v = self.get_src_value(&addr_m).wrapping_add(1);
                 self.set_nz_flags(v);
                 self.mem.write_byte(self.icd.ea, v);
             }
-            "INY" => {
+            Instr::INY => {
                 let v = self.regs.Y.wrapping_add(1);
                 self.set_nz_flags(v);
                 self.regs.Y = v;
             }
-            "INX" => {
+            Instr::INX => {
                 let v = self.regs.Y.wrapping_add(1);
                 self.set_nz_flags(v);
                 self.regs.Y = v;
             }
-            "JMP" => {
+            Instr::JMP => {
                 self.regs.PC = self.icd.ea;
             }
-            "NOP" => {
+            Instr::NOP => {
                 // do nothing...
             }
-            "CMP" => {
+            Instr::CMP => {
                 let v = self.get_src_value(&addr_m);
                 let cmps: u16 = v as u16 - self.regs.A as u16;
                 self.set_c_flag(cmps < 0x100);
                 self.set_nz_flags(cmps as u8);
             }
             _ => {
-                println!("OTHER");
+                
             }
         }
     }
