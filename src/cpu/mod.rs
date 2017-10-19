@@ -73,6 +73,21 @@ pub struct Cpu<'a> {
     icd: InstrCycleData,
 }
 
+// Help macros for opcodes
+
+macro_rules! branch_op {
+    ($self:ident, $flag:ident, $cond:expr) => {
+        if $self.is_flag_on($flag) == $cond {
+                    $self.clk_count += 1;
+                    let prevpc = $self.regs.PC;
+                    $self.regs.PC += $self.icd.ea;
+                    if prevpc & 0xFF00 != $self.regs.PC & 0xFF00 {
+                        $self.clk_count += 2;
+                    }
+                }
+    }
+}                
+
 impl<'a> Cpu<'a> {
     //
     // Initialize processor
@@ -343,14 +358,14 @@ impl<'a> Cpu<'a> {
                 self.set_nz_flags(sub_res as u8);
             }
             Instr::ASL => {
-                let v = self.get_src_value(&addr_m);
+                let mut v = self.get_src_value(&addr_m);
                 self.set_c_flag(v & 0x80 == 0x80);
                 v = v << 1;
                 self.set_nz_flags(v);
                 self.store_value(&addr_m, v);
             }
             Instr::LSR => {
-                let v = self.get_src_value(&addr_m);
+                let mut v = self.get_src_value(&addr_m);
                 self.set_c_flag(v & 1 == 1);
                 v = v >> 1;
                 self.set_nz_flags(v);
@@ -374,8 +389,29 @@ impl<'a> Cpu<'a> {
                 self.set_nz_flags(v as u8);
                 self.store_value(&addr_m, v as u8);
             }
-            
-           
+            Instr::BIT => {
+                let v = self.get_src_value(&addr_m);
+                let tst = v & self.regs.A;
+                self.set_s_flag(v);
+                self.set_v_flag(v & 0x40 == 0x40);
+                self.set_z_flag(tst);
+            }
+            Instr::BNE => branch_op!(self, FLAG_ZERO, false),
+            Instr::BEQ => branch_op!(self, FLAG_ZERO, true),
+            Instr::BCC => branch_op!(self, FLAG_CARRY, false),
+            Instr::BCS => branch_op!(self, FLAG_CARRY, true),
+            Instr::BVC => branch_op!(self, FLAG_OF, false),
+            Instr::BVS => branch_op!(self, FLAG_OF, true),
+            Instr::BPL => branch_op!(self, FLAG_SIGN, false),
+            Instr::BMI => branch_op!(self, FLAG_SIGN, true),
+            Instr::SEC => self.regs.SR |= FLAG_CARRY,
+            Instr::SEI => self.regs.SR |= FLAG_INTR,
+            Instr::SED => self.regs.SR |= FLAG_DEC,
+            Instr::CLC => self.regs.SR &= !FLAG_CARRY,
+            Instr::CLI => self.regs.SR &= !FLAG_INTR,
+            Instr::CLD => self.regs.SR &= !FLAG_DEC,
+            Instr::CLV => self.regs.SR &= !FLAG_OF,
+            Instr::INVALID => panic!("invalid Opcode"),
         }
     }
 
@@ -547,7 +583,9 @@ impl<'a> Cpu<'a> {
                     self.mem.read_byte(indirect_addr.wrapping_add(1)),
                 );
             }
-            AddrMode::Rel => self.icd.ea = self.regs.PC + self.icd.op0 as u16,
+            /* For relative-addressing mode, EA should be interpreted as 16-bit,
+               signed relative-address */
+            AddrMode::Rel => self.icd.ea = if self.icd.op0 & 0x80 == 0x80 { self.icd.op0 as u16 } else { self.icd.op0 as u16 | 0xFF00 }
         }
     }
 
