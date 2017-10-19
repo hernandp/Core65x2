@@ -295,6 +295,53 @@ impl<'a> Cpu<'a> {
                 let v = self.regs.SR;
                 self.push_stack(v);                
             }
+            Instr::ADC => {
+                let v = self.get_src_value(&addr_m);
+                let carry = if self.regs.SR & FLAG_CARRY == FLAG_CARRY { 1 } else { 0 };
+                let mut add_res = self.regs.A as u16 + v as u16 + carry as u16;
+
+                if self.regs.SR & FLAG_DEC == FLAG_DEC {
+                    if (self.regs.A & 0xF) + (v & 0xF) + carry > 9 {
+                        add_res += 6;
+                    }
+                    if add_res > 0x99 {
+                        add_res += 96;
+                    }
+                    if add_res > 0x99 {
+                        self.set_c_flag(true);
+                    }
+                }
+                else
+                {
+                    if add_res > 0xFF {
+                        self.set_c_flag(true);
+                    }
+                }
+
+                let of_check: bool = ((self.regs.A ^ v) & 0x80) != 0 && ((self.regs.A ^ v) & 0x80) != 0;
+                self.set_v_flag(!of_check);
+                self.regs.A = add_res as u8;
+                self.set_nz_flags(add_res as u8);
+            }
+            Instr::SBC => {
+                let v = self.get_src_value(&addr_m);
+                let carry = if self.regs.SR & FLAG_CARRY == FLAG_CARRY { 0 } else { 1 };
+                let mut sub_res = self.regs.A as u16 - v as u16 - carry as u16;
+
+                if self.regs.SR & FLAG_DEC == FLAG_DEC {
+                    if (self.regs.A & 0xF) - carry > (v & 0xF)  {
+                        sub_res -= 6;
+                    }
+                    if sub_res > 0x99 {
+                        sub_res -= 0x60;
+                    }
+                }
+
+                let of_check: bool = ((self.regs.A ^ v) & 0x80) != 0 && ((self.regs.A ^ v) & 0x80) != 0;
+                self.set_v_flag(of_check);
+                self.regs.A = sub_res as u8;
+                self.set_nz_flags(sub_res as u8);
+            }
             _ => {
                 
             }
