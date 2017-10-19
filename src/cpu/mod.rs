@@ -342,9 +342,40 @@ impl<'a> Cpu<'a> {
                 self.regs.A = sub_res as u8;
                 self.set_nz_flags(sub_res as u8);
             }
-            _ => {
-                
+            Instr::ASL => {
+                let v = self.get_src_value(&addr_m);
+                self.set_c_flag(v & 0x80 == 0x80);
+                v = v << 1;
+                self.set_nz_flags(v);
+                self.store_value(&addr_m, v);
             }
+            Instr::LSR => {
+                let v = self.get_src_value(&addr_m);
+                self.set_c_flag(v & 1 == 1);
+                v = v >> 1;
+                self.set_nz_flags(v);
+                self.store_value(&addr_m, v);
+            }
+            Instr::ROR => {
+                let mut v = self.get_src_value(&addr_m) as u16; 
+                if self.is_flag_on(FLAG_CARRY) {
+                    v = v | 0x100;
+                }
+                self.set_c_flag(v & 1 == 1);
+                v = v >> 1;
+                self.set_nz_flags(v as u8);
+                self.store_value(&addr_m, v as u8);
+            }
+            Instr::ROL => {
+                let carry = if self.regs.SR & FLAG_CARRY == FLAG_CARRY { 1 } else { 0 };
+                let mut v = self.get_src_value(&addr_m) as u16; 
+                v = (v << 1) | carry;
+                self.set_c_flag(v & 0xFF00 == 0xFF00);
+                self.set_nz_flags(v as u8);
+                self.store_value(&addr_m, v as u8);
+            }
+            
+           
         }
     }
 
@@ -534,6 +565,13 @@ impl<'a> Cpu<'a> {
         match *addr_mode {
             AddrMode::Acc => self.regs.A,
             _ => self.mem.read_byte(self.icd.ea),
+        }
+    }
+
+    fn store_value(&mut self, addr_mode: &AddrMode, v: u8) {
+        match *addr_mode {
+            AddrMode::Acc => self.regs.A = v,
+            _ => self.mem.write_byte(self.icd.ea, v),
         }
     }
 }
