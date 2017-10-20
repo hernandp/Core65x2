@@ -3,6 +3,8 @@ use std::fs::*;
 use cpu;
 use cpu::opc6502::OPCODE_TABLE;
 
+
+
 #[derive(PartialEq)]
 pub enum Command {
     Asm,
@@ -10,7 +12,7 @@ pub enum Command {
     Enter,
     Mem,
     Go,
-    Load(String),
+    Load { filename: String, start_addr: u16 },
     Null,
     Quit,
     Reg,    
@@ -73,20 +75,30 @@ pub fn do_prompt() -> Command {
             Some('E') => return Command::Enter,
             Some('G') => return Command::Go,
             Some('L') => { 
-                 if argvec.len() > 0 {
-                    if argvec[0] == "?" {
-                        println!("L[filename][,addr]\tLoad program in memory\n");
-                        println!("filename\t\tBinary image with code to load. Should not exceed 64K.");
-                        println!("addr    \t\tAddress where the code is going to be located.");
-                        return Command::Null
-                    }
-                }
-                if argvec.len() == 0 {
+                  if argvec.len() == 0 {
                     println!("?Filename not specified  error");
                     return Command::Null;
-                }               
-              
-                return Command::Load(String::from(argvec[0]));
+                }     
+                
+                if argvec[0] == "?" {
+                    println!("L[filename][,addr]\tLoad program in memory\n");
+                    println!("filename\t\tBinary image with code to load. Should not exceed 64K.");
+                    println!("addr    \t\tAddress where the code is going to be located.");
+                    return Command::Null
+                } 
+
+                let mut startaddr:u16 = 0;
+                if argvec.len() > 1 {
+                    let ad = u16::from_str_radix(argvec[1], 16);
+                    if ad.is_err() {
+                        println!("?Invalid address: {}", argvec[1]);
+                        return Command::Null;
+                    }
+                    else {
+                        startaddr = ad.unwrap();
+                    }
+                }                         
+                return Command::Load{ filename: String::from(argvec[0]), start_addr: startaddr };
             },
             Some('M') => return Command::Mem,
             Some('R') => return Command::Reg,
@@ -102,7 +114,7 @@ pub fn do_prompt() -> Command {
 pub fn exec(cmd: &Command, cpu: &mut cpu::Cpu) -> bool {
     match *cmd {
         Command::Go => {
-            let clk = cpu.exec();
+            cpu.exec();
         },
         Command::Reg => {
             println!("PC      N V - B D I Z C    AC  XR  YR  SP");
@@ -117,7 +129,7 @@ pub fn exec(cmd: &Command, cpu: &mut cpu::Cpu) -> bool {
             rC = if cpu.is_flag_on(cpu::FLAG_CARRY) { '1' } else { '.' });
         },
         Command::Disasm { start_addr, length } => {
-            let mut current_addr = cpu.regs.PC;
+            let mut current_addr = if start_addr.is_some() { start_addr.unwrap() } else { 0 };
             for _ in 0..10 {  
                 let opcode_byte = cpu.mem.read_byte(current_addr);
                 let opcode_data = &OPCODE_TABLE[opcode_byte as usize];
@@ -165,13 +177,13 @@ pub fn exec(cmd: &Command, cpu: &mut cpu::Cpu) -> bool {
                 }
                 for i in 0..8 {                    
                     print!(".");
-                    //print!("{}", cpu.mem.read_byte(current_addr + i));
+                    print!("{}", cpu.mem.read_byte(current_addr + i) as char);
                 }
                 println!("");
                 current_addr += 8;
             }
         },
-        Command::Load(ref filename) => {
+        Command::Load{ ref filename, start_addr } => {
             let binary_file = File::open(filename);
             if binary_file.is_err()
             {
@@ -187,8 +199,8 @@ pub fn exec(cmd: &Command, cpu: &mut cpu::Cpu) -> bool {
                 }
                 else
                 {
-                    cpu.mem.write_vec(0, &buf);
-                    println!("Read {} bytes to address {:04X}", res.unwrap(), 0);
+                    cpu.mem.write_vec(start_addr, &buf);
+                    println!("Read {} bytes to address {:04X}", res.unwrap(), start_addr);
                 }
             }
         },
