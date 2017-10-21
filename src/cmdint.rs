@@ -1,9 +1,8 @@
 use std::io::*;
 use std::fs::*;
+use std::ascii::AsciiExt;
 use cpu;
 use cpu::opc6502::OPCODE_TABLE;
-
-
 
 #[derive(PartialEq)]
 pub enum Command {
@@ -15,6 +14,7 @@ pub enum Command {
     Load { filename: String, start_addr: u16 },
     Null,
     Quit,
+    ResetCPU,
     Reg,    
 }
 
@@ -35,26 +35,28 @@ pub fn do_prompt() -> Command {
         let argvec: Vec<&str> = if args.len() == 0 { Vec::new() } else { args.trim().split(",").collect() };
                 
         match cmdch {
+            Some('!') => {
+                  if argvec.len() == 0 {
+                    println!("?Extended command missing  error");
+                    return Command::Null;
+                  }
+                  
+                  match argvec[0].to_uppercase().as_ref() {
+                      "RESET" => { 
+                          let ch = ask_choice("Reset CPU (Y/N)?", &vec!['y','n']);
+                          if ch == 'Y' {
+                              return Command::ResetCPU;
+                          }
+                       }
+                      _ => { println!("?Unknown extended command: {}", argvec[1])}
+                  }
+            }
             Some('Q') => {
-                print!("Do you want to quit (Y/N)?");
-                stdout().flush().unwrap();
-
-                loop {
-                    let mut r = String::new();
-                    stdin()
-                        .read_line(&mut r)
-                        .expect("read_line from stdin failed");
-
-                    r = String::from(r.trim()).to_uppercase();
-                    let ch = r.chars().next();
-
-                    if ch.is_some() && (ch.unwrap() == 'Y' || ch.unwrap() == 'y') {
-                        return Command::Quit;
-                    }
-                    if ch.is_some() && (ch.unwrap() == 'N' || ch.unwrap() == 'n') {
-                        return Command::Null;
-                    }
+                let ch = ask_choice("Do you want to quit (Y/N)?", &vec!['y','n']);
+                if ch == 'Y' {
+                    return Command::Quit;
                 }
+                    return Command::Null;
             }
             Some('A') => return Command::Asm,
             Some('D') => {
@@ -116,6 +118,10 @@ pub fn exec(cmd: &Command, cpu: &mut cpu::Cpu) -> bool {
         Command::Go => {
             cpu.exec();
         },
+        Command::ResetCPU => {
+            cpu.reset();
+            exec(&Command::Reg, cpu);
+        }
         Command::Reg => {
             println!("PC      N V - B D I Z C    AC  XR  YR  SP");
             println!("{:04X}    {rN} {rV}   {rB} {rD} {rI} {rZ} {rC}    {ac:02X}  {xr:02X}  {yr:02X}  {sp:02X}", regs = cpu.regs.PC, 
@@ -175,9 +181,14 @@ pub fn exec(cmd: &Command, cpu: &mut cpu::Cpu) -> bool {
                 for i in 0..8 {                    
                     print!("{:02X} ", cpu.mem.read_byte(current_addr + i));
                 }
-                for i in 0..8 {                    
-                    print!(".");
-                    print!("{}", cpu.mem.read_byte(current_addr + i) as char);
+                for i in 0..8 {
+                    let cb = cpu.mem.read_byte(current_addr + i);
+                    if cb >= 32 {
+                        print!("{}", cpu.mem.read_byte(current_addr + i) as char);
+                    }
+                    else {
+                        print!(".");
+                    }
                 }
                 println!("");
                 current_addr += 8;
@@ -240,4 +251,26 @@ pub fn exec(cmd: &Command, cpu: &mut cpu::Cpu) -> bool {
         _ => {}
     }
     true
+}
+
+fn ask_choice(text: &str, options: &Vec<char>) -> char {
+    print!("{}",text);
+    stdout().flush().unwrap();
+    loop {
+        
+        let mut r = String::new();
+        stdin()
+            .read_line(&mut r)
+            .expect("read_line from stdin failed");
+
+        r = String::from(r.trim()).to_uppercase();
+        let ch = r.chars().next();
+        if ch.is_some() {
+            let b = options.into_iter().find( |&c| c.to_uppercase().nth(0).unwrap() == ch.unwrap());
+
+            if b.is_some() {
+                return ch.unwrap();
+            }
+        }
+    }
 }
