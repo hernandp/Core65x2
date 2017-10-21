@@ -35,17 +35,17 @@ const VECTOR_IRQ_BRK: u16 = 0xFFFE;
 pub enum AddrMode {
     Acc, // Accumulator
     Impl,
-    Imm, // LDA #$22   Immediate
-    ZP, // LDY $02      Zero-page
-    ZPX, // LDA $00,X    Zero-page indexed (X)
-    ZPY, // LDA $00,Y    Zero-page indexed (Y)
+    Imm,    // LDA #$22   Immediate
+    ZP,     // LDY $02      Zero-page
+    ZPX,    // LDA $00,X    Zero-page indexed (X)
+    ZPY,    // LDA $00,Y    Zero-page indexed (Y)
     ZPIndX, // ($00,X)      Zero-page indexed indirect X
     ZPIndY, // ($00),Y      Zero-page indexed indirect Y
-    Abs, // LDX $0000    Absolute
-    AbsX, // ADC $C000,X  Absolute indexed with X
-    AbsY, // INC $F000,Y  Absolute indexed with Y
-    Ind, // ($0000)      Indirect
-    Rel, // PC + $00
+    Abs,    // LDX $0000    Absolute
+    AbsX,   // ADC $C000,X  Absolute indexed with X
+    AbsY,   // INC $F000,Y  Absolute indexed with Y
+    Ind,    // ($0000)      Indirect
+    Rel,    // PC + $00
 }
 
 
@@ -86,7 +86,7 @@ macro_rules! branch_op {
                     }
                 }
     }
-}                
+}
 
 impl<'a> Cpu<'a> {
     //
@@ -125,13 +125,39 @@ impl<'a> Cpu<'a> {
         self.regs.SP = 0xFD;
         self.clk_count = 7;
     }
+    //
+    // Trigger NMI
+    //
+    pub fn nmi(&mut self) {
+        self.push_pc();
+        self.set_b_flag(false);
+        self.push_sr();
+        self.set_i_flag(true);
+        self.regs.PC = self.addr_from_2b(
+            self.mem.read_byte(VECTOR_NMI),
+            self.mem.read_byte(VECTOR_NMI + 1),
+        );
+    }
+
+    //
+    // Trigger IRQ
+    //
+    pub fn irq(&mut self) {
+        self.push_pc();
+        self.set_b_flag(false);
+        self.push_sr();
+        self.set_i_flag(true);
+        self.regs.PC = self.addr_from_2b(
+            self.mem.read_byte(VECTOR_IRQ_BRK),
+            self.mem.read_byte(VECTOR_IRQ_BRK + 1),
+        );
+    }
 
     //
     // Execute instruction at current program counter.
     // Returns elapsed clock cycles.
     //
     pub fn exec(&mut self) {
-
         // Fetch instruction, operands and calculate effective address
 
         self.fetch_instr();
@@ -262,7 +288,7 @@ impl<'a> Cpu<'a> {
                 self.set_nz_flags(v);
                 self.regs.A = v;
             }
-            Instr::JSR => {  
+            Instr::JSR => {
                 let pch: u8 = ((self.regs.PC - 1) >> 8) as u8;
                 let pcl: u8 = ((self.regs.PC - 1) & 0xFF) as u8;
                 self.push_stack(pch);
@@ -276,15 +302,14 @@ impl<'a> Cpu<'a> {
             }
             Instr::BRK => {
                 self.regs.PC += 1;
-                let retaddrh: u8 = (self.regs.PC >> 8) as u8;
-                let retaddrl: u8 = (self.regs.PC & 0xFF) as u8;
-                self.push_stack(retaddrh);
-                self.push_stack(retaddrl);
+                self.push_pc();
                 self.set_b_flag(true);
-                let sr = self.regs.SR;
-                self.push_stack(sr);
-                self.set_i_flag(true);    
-                self.regs.PC = self.addr_from_2b(self.mem.read_byte(VECTOR_RESET), self.mem.read_byte(VECTOR_RESET + 1));
+                self.push_sr();
+                self.set_i_flag(true);
+                self.regs.PC = self.addr_from_2b(
+                    self.mem.read_byte(VECTOR_RESET),
+                    self.mem.read_byte(VECTOR_RESET + 1),
+                );
             }
             Instr::RTI => {
                 self.regs.SR = self.pop_stack();
@@ -304,15 +329,19 @@ impl<'a> Cpu<'a> {
             Instr::PLP => {
                 let v = self.pop_stack();
                 self.regs.SR = v;
-                self.set_nz_flags(v);                
+                self.set_nz_flags(v);
             }
             Instr::PHP => {
                 let v = self.regs.SR;
-                self.push_stack(v);                
+                self.push_stack(v);
             }
             Instr::ADC => {
                 let v = self.get_src_value(&addr_m);
-                let carry = if self.regs.SR & FLAG_CARRY == FLAG_CARRY { 1 } else { 0 };
+                let carry = if self.regs.SR & FLAG_CARRY == FLAG_CARRY {
+                    1
+                } else {
+                    0
+                };
                 let mut add_res = self.regs.A as u16 + v as u16 + carry as u16;
 
                 if self.regs.SR & FLAG_DEC == FLAG_DEC {
@@ -325,26 +354,29 @@ impl<'a> Cpu<'a> {
                     if add_res > 0x99 {
                         self.set_c_flag(true);
                     }
-                }
-                else
-                {
+                } else {
                     if add_res > 0xFF {
                         self.set_c_flag(true);
                     }
                 }
 
-                let of_check: bool = ((self.regs.A ^ v) & 0x80) != 0 && ((self.regs.A ^ v) & 0x80) != 0;
+                let of_check: bool =
+                    ((self.regs.A ^ v) & 0x80) != 0 && ((self.regs.A ^ v) & 0x80) != 0;
                 self.set_v_flag(!of_check);
                 self.regs.A = add_res as u8;
                 self.set_nz_flags(add_res as u8);
             }
             Instr::SBC => {
                 let v = self.get_src_value(&addr_m);
-                let carry = if self.regs.SR & FLAG_CARRY == FLAG_CARRY { 0 } else { 1 };
+                let carry = if self.regs.SR & FLAG_CARRY == FLAG_CARRY {
+                    0
+                } else {
+                    1
+                };
                 let mut sub_res = self.regs.A as u16 - v as u16 - carry as u16;
 
                 if self.regs.SR & FLAG_DEC == FLAG_DEC {
-                    if (self.regs.A & 0xF) - carry > (v & 0xF)  {
+                    if (self.regs.A & 0xF) - carry > (v & 0xF) {
                         sub_res -= 6;
                     }
                     if sub_res > 0x99 {
@@ -352,7 +384,8 @@ impl<'a> Cpu<'a> {
                     }
                 }
 
-                let of_check: bool = ((self.regs.A ^ v) & 0x80) != 0 && ((self.regs.A ^ v) & 0x80) != 0;
+                let of_check: bool =
+                    ((self.regs.A ^ v) & 0x80) != 0 && ((self.regs.A ^ v) & 0x80) != 0;
                 self.set_v_flag(of_check);
                 self.regs.A = sub_res as u8;
                 self.set_nz_flags(sub_res as u8);
@@ -372,7 +405,7 @@ impl<'a> Cpu<'a> {
                 self.store_value(&addr_m, v);
             }
             Instr::ROR => {
-                let mut v = self.get_src_value(&addr_m) as u16; 
+                let mut v = self.get_src_value(&addr_m) as u16;
                 if self.is_flag_on(FLAG_CARRY) {
                     v = v | 0x100;
                 }
@@ -382,8 +415,12 @@ impl<'a> Cpu<'a> {
                 self.store_value(&addr_m, v as u8);
             }
             Instr::ROL => {
-                let carry = if self.regs.SR & FLAG_CARRY == FLAG_CARRY { 1 } else { 0 };
-                let mut v = self.get_src_value(&addr_m) as u16; 
+                let carry = if self.regs.SR & FLAG_CARRY == FLAG_CARRY {
+                    1
+                } else {
+                    0
+                };
+                let mut v = self.get_src_value(&addr_m) as u16;
                 v = (v << 1) | carry;
                 self.set_c_flag(v & 0xFF00 == 0xFF00);
                 self.set_nz_flags(v as u8);
@@ -419,8 +456,13 @@ impl<'a> Cpu<'a> {
     //
     pub fn get_instr_length(&self, addrm: &AddrMode) -> u32 {
         match *addrm {
-            AddrMode::Imm | AddrMode::ZP | AddrMode::ZPX | AddrMode::ZPY | AddrMode::ZPIndX |
-            AddrMode::ZPIndY | AddrMode::Rel => 2,
+            AddrMode::Imm |
+            AddrMode::ZP |
+            AddrMode::ZPX |
+            AddrMode::ZPY |
+            AddrMode::ZPIndX |
+            AddrMode::ZPIndY |
+            AddrMode::Rel => 2,
             AddrMode::Abs | AddrMode::AbsX | AddrMode::AbsY | AddrMode::Ind => 3,
             _ => 1,
         }
@@ -478,7 +520,7 @@ impl<'a> Cpu<'a> {
         }
     }
 
-    fn set_b_flag(&mut self, v: bool ) {
+    fn set_b_flag(&mut self, v: bool) {
         if v == false {
             self.regs.SR |= FLAG_BRK;
         } else {
@@ -486,7 +528,7 @@ impl<'a> Cpu<'a> {
         }
     }
 
-    fn set_i_flag(&mut self, v: bool ) {
+    fn set_i_flag(&mut self, v: bool) {
         if v == false {
             self.regs.SR |= FLAG_INTR;
         } else {
@@ -532,32 +574,25 @@ impl<'a> Cpu<'a> {
                     self.clk_count += 1;
                 };
 
-                self.icd.ea = (self.regs.X as u16).wrapping_add(self.addr_from_2b(
-                    self.icd.op0,
-                    self.icd.op1,
-                ));
+                self.icd.ea = (self.regs.X as u16)
+                    .wrapping_add(self.addr_from_2b(self.icd.op0, self.icd.op1));
             }
 
             AddrMode::AbsY => {
                 if (self.regs.Y).overflowing_add(self.icd.op0).1 {
                     self.clk_count += 1;
                 };
-                self.icd.ea = (self.regs.Y as u16).wrapping_add(self.addr_from_2b(
-                    self.icd.op0,
-                    self.icd.op1,
-                ));
+                self.icd.ea = (self.regs.Y as u16)
+                    .wrapping_add(self.addr_from_2b(self.icd.op0, self.icd.op1));
             }
 
             AddrMode::ZPIndX => {
                 self.icd.ea = self.addr_from_2b(
-                    self.mem.read_byte(
-                        self.regs.X.wrapping_add(self.icd.op0) as u16,
-                    ),
-                    self.mem.read_byte(
-                        self.regs.X.wrapping_add(1).wrapping_add(
-                            self.icd.op0,
-                        ) as u16,
-                    ),
+                    self.mem
+                        .read_byte(self.regs.X.wrapping_add(self.icd.op0) as u16),
+                    self.mem
+                        .read_byte(self.regs.X.wrapping_add(1).wrapping_add(self.icd.op0)
+                            as u16),
                 )
             }
 
@@ -585,9 +620,28 @@ impl<'a> Cpu<'a> {
             }
             /* For relative-addressing mode, EA should be interpreted as 16-bit,
                signed relative-address */
-            AddrMode::Rel => self.icd.ea = if self.icd.op0 & 0x80 == 0x80 { self.icd.op0 as u16 } else { self.icd.op0 as u16 | 0xFF00 }
+            AddrMode::Rel => {
+                self.icd.ea = if self.icd.op0 & 0x80 == 0x80 {
+                    self.icd.op0 as u16
+                } else {
+                    self.icd.op0 as u16 | 0xFF00
+                }
+            }
         }
     }
+
+    fn push_pc(&mut self) {
+        let retaddrh: u8 = (self.regs.PC >> 8) as u8;
+        let retaddrl: u8 = (self.regs.PC & 0xFF) as u8;
+        self.push_stack(retaddrh);
+        self.push_stack(retaddrl);
+    }
+
+    fn push_sr(&mut self) {
+        let sr = self.regs.SR;
+        self.push_stack(sr);
+    }
+
 
     fn push_stack(&mut self, v: u8) {
         self.mem.write_byte(self.regs.SP as u16, v);
