@@ -14,7 +14,7 @@ pub enum Command {
     Null,
     Quit,
     ResetCPU,
-    Reg { reg: Option<String>, val: Option<u16> },    
+    Reg { reg: String, val: u16 },    
     Step
 }
 
@@ -68,23 +68,28 @@ pub fn do_prompt() -> Command {
 
                 let mut startaddr:u16 = 0;
                 let mut len:u16 = 32;
-                let v = u16::from_str_radix(argvec[0], 16);
-                if v.is_err() {
-                    println!("?Invalid address: {}", argvec[0]);
-                    return Command::Null;
-                }
-                else {
-                    startaddr = v.unwrap();
+
+                if argvec.len() == 1 {
+                    let v = u16::from_str_radix(argvec[0], 16);
+                    if v.is_err() {
+                        println!("?Invalid address: {}", argvec[0]);
+                        return Command::Null;
+                    }
+                    else {
+                        startaddr = v.unwrap();
+                    }
                 }
 
-                let v = u16::from_str_radix(argvec[1], 16);
-                if v.is_err() {
-                    println!("?Invalid length: {}", argvec[1]);
-                    return Command::Null;
+                if argvec.len() == 2 {
+                    let v = u16::from_str_radix(argvec[1], 16);
+                    if v.is_err() {
+                        println!("?Invalid length: {}", argvec[1]);
+                        return Command::Null;
+                    }
+                    else {
+                        len = v.unwrap();
+                    }   
                 }
-                else {
-                    len = v.unwrap();
-                }   
            
                 return Command::Disasm { start_addr: startaddr, length: len };
             },
@@ -117,24 +122,23 @@ pub fn do_prompt() -> Command {
                     return Command::Null;
                 }
 
-                let mut regname: Option<String> = None;
-                let mut regval:  Option<u16> = None;
+                let mut regname: String = String::new();
+                let mut regval:  u16 = 0xffff;
 
                 if argvec.len() > 1 {
-                    let r = argvec[0].to_uppercase();
-                    if r != "X" && r != "SR" && r != "Y" && r != "A" && r != "PC" && r != "SP" {
+                    regname = argvec[0].to_uppercase();
+                    if regname != "X" && regname != "SR" && regname != "Y" && regname != "A" && regname != "PC" && regname != "SP" {
                         println!("?Invalid register. Use A,X,Y,PC,SP,SR");
                         return Command::Null;
                     }
-                    regname = Some(r);
-                    
-                    let ad = u16::from_str_radix(argvec[1], 16);
-                    if ad.is_err() {
+                                        
+                    let v = u16::from_str_radix(argvec[1], 16);
+                    if v.is_err() {
                         println!("?Invalid value: {}", argvec[1]);
                         return Command::Null;
                     }
                     else {
-                        regval = Some(ad.unwrap());
+                        regval = v.unwrap();
                     }
                 }    
 
@@ -156,10 +160,10 @@ pub fn exec(cmd: &Command, cpu: &mut cpu::Cpu) -> bool {
         },
         Command::ResetCPU => {
             cpu.reset();
-            exec(&Command::Reg { reg:None, val:None }, cpu);
+            exec(&Command::Reg { reg: String::new(), val:0 }, cpu);
         }
-        Command::Reg { ref reg, ref val }=> {
-            if reg.is_none() {
+        Command::Reg { ref reg, val }=> {
+            if reg == "" {
                 println!("PC      N V - B D I Z C    AC  XR  YR  SP");
                 println!("{:04X}    {rN} {rV}   {rB} {rD} {rI} {rZ} {rC}    {ac:02X}  {xr:02X}  {yr:02X}  {sp:02X}", regs = cpu.regs.PC, 
                 ac = cpu.regs.A, xr = cpu.regs.X, yr = cpu.regs.Y, sp = cpu.regs.SP,
@@ -173,9 +177,20 @@ pub fn exec(cmd: &Command, cpu: &mut cpu::Cpu) -> bool {
             } 
             else {
                 match reg.as_ref() {
-                    Some("X") => {}
-                    _ => panic!("R command with unexpected regname")
-                }                                
+                    "X" => cpu.regs.X = val as u8,
+                    "Y" => cpu.regs.Y = val as u8,
+                    "A" => cpu.regs.A = val as u8,
+                    "SP" => cpu.regs.SP = val as u8,
+                    "SR" => cpu.regs.SR = val as u8,
+                    "PC" => cpu.regs.PC = val,                    
+                    _ => panic!()
+                }   
+                if reg == "PC" { 
+                    println!("{} = {:04X}", reg, val);
+                } 
+                else { 
+                    println!("{} = {:02X}", reg, val);
+                }                          
             }
         },
         Command::Disasm { start_addr, length } => {
