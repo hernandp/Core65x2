@@ -66,11 +66,18 @@ struct InstrCycleData {
     op1: u8,
 }
 
+
+// struct InterruptTraps <'a>{
+//     brk_pre: Option<&'a fn ()>,
+//     brk_post:Option<&'a fn ()>,
+// }
+
 pub struct Cpu<'a> {
     pub regs: Regs,
     pub mem: &'a mut Memory,
     clk_count: u64,
     icd: InstrCycleData,
+    //int_traps: InterruptTraps<'a>,
 }
 
 // Help macros for opcodes
@@ -110,6 +117,11 @@ impl<'a> Cpu<'a> {
                 op0: 0x00,
                 op1: 0x00,
             },
+            /*int_traps: InterruptTraps {
+                brk_pre: None,
+                brk_post: None,
+            }
+            */
         }
     }
 
@@ -152,6 +164,17 @@ impl<'a> Cpu<'a> {
             self.mem.read_byte(VECTOR_IRQ_BRK + 1),
         );
     }
+
+    // //
+    // // Set external trap function for interrupts
+    // //
+    // pub fn set_brk_trap_pre(&mut self, f: &'a fn ()) {
+    //     self.int_traps.brk_pre = Some(f);    
+    // }
+
+    // pub fn clear_brk_trap_pre(&mut self) {
+    //     self.int_traps.brk_pre = None;
+    // }
 
     //
     // Execute instruction at current program counter.
@@ -450,11 +473,13 @@ impl<'a> Cpu<'a> {
             Instr::CLV => self.regs.SR &= !FLAG_OF,
             Instr::INVALID => panic!("invalid Opcode"),
         }
+
+        self.regs.PC += self.get_instr_length(&addr_m);
     }
 
     // Gets instruction length by addressing mode
     //
-    pub fn get_instr_length(&self, addrm: &AddrMode) -> u32 {
+    pub fn get_instr_length(&self, addrm: &AddrMode) -> u16 {
         match *addrm {
             AddrMode::Imm |
             AddrMode::ZP |
@@ -469,17 +494,15 @@ impl<'a> Cpu<'a> {
     }
 
     //
-    // Fetch instruction, and updates program counter
-    //
+    // Fetch instruction
     fn fetch_instr(&mut self) {
         self.icd.opcode = self.mem.read_byte(self.regs.PC);
-        self.regs.PC = self.regs.PC + 1;
     }
 
     //
-    // Fetch operands, updating program counter
+    // Fetch operands
     //
-    fn fetch_op(&mut self, addr_mode: &AddrMode) {
+    fn fetch_op(&mut self, addr_mode: &AddrMode)  {
         let num_operands = self.get_instr_length(addr_mode) - 1;
 
         if num_operands != 0 {
@@ -488,7 +511,6 @@ impl<'a> Cpu<'a> {
         if num_operands == 2 {
             self.icd.op1 = self.mem.read_byte(self.regs.PC + 1);
         }
-        self.regs.PC += num_operands as u16;
     }
 
     pub fn is_flag_on(&self, flag: u8) -> bool {
@@ -564,7 +586,7 @@ impl<'a> Cpu<'a> {
     fn calc_eff_addr(&mut self, addr_mode: &AddrMode) {
         match *addr_mode {
             AddrMode::Acc | AddrMode::Impl => {}
-            AddrMode::Imm => self.icd.ea = self.regs.PC + 1,
+            AddrMode::Imm => self.icd.ea = self.regs.PC + 1, /*we already fetched operands*/
             AddrMode::ZP => self.icd.ea = self.icd.op0 as u16,
             AddrMode::ZPX => self.icd.ea = self.icd.op0.wrapping_add(self.regs.X) as u16,
             AddrMode::ZPY => self.icd.ea = self.icd.op0.wrapping_add(self.regs.Y) as u16,
