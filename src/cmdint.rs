@@ -18,7 +18,6 @@ pub enum Command {
     Step
 }
 
-
 pub fn do_prompt() -> Command {
     let mut line = String::new();
     print!(".");
@@ -155,8 +154,12 @@ pub fn do_prompt() -> Command {
 
 pub fn exec(cmd: &Command, cpu: &mut cpu::Cpu) -> bool {
     match *cmd {
-        Command::Go => {
-            cpu.exec();
+        Command::Go => loop {
+            if cpu.exec().brk_trap {
+                println!("?BREAK\n");
+                exec(&Command::Reg { reg: String::new(), val:0 }, cpu);
+                break;
+            }
         },
         Command::ResetCPU => {
             cpu.reset();
@@ -195,7 +198,7 @@ pub fn exec(cmd: &Command, cpu: &mut cpu::Cpu) -> bool {
         },
         Command::Disasm { start_addr, length } => {
             let mut current_addr = start_addr;
-            let mut byte_count: u32 = 0;
+            let mut byte_count: u16 = 0;
             loop {  
                 let opcode_byte = cpu.mem.read_byte(current_addr);
                 let opcode_data = &OPCODE_TABLE[opcode_byte as usize];
@@ -230,10 +233,10 @@ pub fn exec(cmd: &Command, cpu: &mut cpu::Cpu) -> bool {
                     cpu::AddrMode::Ind   => format!("(${:04X}{:04X})", op1, op0),
                     cpu::AddrMode::Impl   => format!("")                    
                 });
-                current_addr += instr_len as u16;
+                current_addr += instr_len ;
                 byte_count += instr_len;
 
-                if byte_count >= length as u32 {
+                if byte_count >= length  {
                     break;
                 }
             }
@@ -365,7 +368,7 @@ fn display_help() {
     println!("A         Assemble");
     println!("D         Dissassemble");
     println!("E         Enter values in memory");
-    println!("G         Go (execute CPU)");
+    println!("G         Go");
     println!("L         Load file");
     println!("R         Display or modify registers");
     println!("S         Step");

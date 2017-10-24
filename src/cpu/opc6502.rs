@@ -1,5 +1,6 @@
 use cpu::AddrMode;
 
+#[derive(PartialEq)]
 pub enum Instr {
     INVALID, BRK, ORA, ASL, PHP, PLA, LDA, LDX, LDY, STA, STX, STY,
     CMP, CPX, CPY, DEC, DEX, DEY, INC, INX, INY, TSX, TXS, TAX, TXA,

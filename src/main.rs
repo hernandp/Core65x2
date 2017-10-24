@@ -14,7 +14,6 @@ fn main() {
         
     let mut sys_mem = Memory::new();
     let mut sys_cpu = Cpu::new(&mut sys_mem);
-
     sys_cpu.reset();
     cmdint::exec(&cmdint::Command::Reg{ reg: String::new(), val: 0 }, &mut sys_cpu);
 

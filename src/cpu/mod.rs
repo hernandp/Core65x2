@@ -66,19 +66,22 @@ struct InstrCycleData {
     op1: u8,
 }
 
+pub struct InstrExecResult {
+    pub brk_trap: bool,
+}
 
-// struct InterruptTraps <'a>{
-//     brk_pre: Option<&'a fn ()>,
-//     brk_post:Option<&'a fn ()>,
-// }
+struct InterruptTraps <'a>{
+    brk_trap: Option<&'a Fn()>,
+}
 
 pub struct Cpu<'a> {
     pub regs: Regs,
     pub mem: &'a mut Memory,
     clk_count: u64,
     icd: InstrCycleData,
-    //int_traps: InterruptTraps<'a>,
+    traps: InterruptTraps<'a>,
 }
+
 
 // Help macros for opcodes
 
@@ -117,11 +120,9 @@ impl<'a> Cpu<'a> {
                 op0: 0x00,
                 op1: 0x00,
             },
-            /*int_traps: InterruptTraps {
-                brk_pre: None,
-                brk_post: None,
+            traps: InterruptTraps {
+                brk_trap: None,
             }
-            */
         }
     }
 
@@ -165,24 +166,23 @@ impl<'a> Cpu<'a> {
         );
     }
 
-    // //
-    // // Set external trap function for interrupts
-    // //
-    // pub fn set_brk_trap_pre(&mut self, f: &'a fn ()) {
-    //     self.int_traps.brk_pre = Some(f);    
-    // }
+    // 
+    // Set external trap function for interrupts
+    //   
+    pub fn set_brk_trap(&mut self, f: &'a Fn()) {
+        self.traps.brk_trap = Some(f);
+    }
 
-    // pub fn clear_brk_trap_pre(&mut self) {
-    //     self.int_traps.brk_pre = None;
-    // }
+    pub fn clear_brk_trap(&mut self) {
+        self.traps.brk_trap = None;
+    }
 
     //
     // Execute instruction at current program counter.
     // Returns elapsed clock cycles.
     //
-    pub fn exec(&mut self) {
+    pub fn exec(&mut self) -> InstrExecResult {
         // Fetch instruction, operands and calculate effective address
-
         self.fetch_instr();
         let addr_m = &OPCODE_TABLE[self.icd.opcode as usize].addr_m;
 
@@ -475,6 +475,8 @@ impl<'a> Cpu<'a> {
         }
 
         self.regs.PC += self.get_instr_length(&addr_m);
+
+        InstrExecResult { brk_trap: Instr::BRK == OPCODE_TABLE[self.icd.opcode as usize].ins }        
     }
 
     // Gets instruction length by addressing mode
@@ -517,7 +519,6 @@ impl<'a> Cpu<'a> {
         self.regs.SR & flag == flag
     }
 
-
     fn set_s_flag(&mut self, v: u8) {
         if v >= 0x80 {
             self.regs.SR |= FLAG_SIGN;
@@ -535,7 +536,7 @@ impl<'a> Cpu<'a> {
     }
 
     fn set_c_flag(&mut self, v: bool) {
-        if v == false {
+        if v {
             self.regs.SR |= FLAG_CARRY;
         } else {
             self.regs.SR &= !FLAG_CARRY;
@@ -543,7 +544,7 @@ impl<'a> Cpu<'a> {
     }
 
     fn set_b_flag(&mut self, v: bool) {
-        if v == false {
+        if v {
             self.regs.SR |= FLAG_BRK;
         } else {
             self.regs.SR &= !FLAG_BRK;
@@ -551,7 +552,7 @@ impl<'a> Cpu<'a> {
     }
 
     fn set_i_flag(&mut self, v: bool) {
-        if v == false {
+        if v {
             self.regs.SR |= FLAG_INTR;
         } else {
             self.regs.SR &= !FLAG_INTR;
@@ -559,7 +560,7 @@ impl<'a> Cpu<'a> {
     }
 
     fn set_v_flag(&mut self, v: bool) {
-        if v == false {
+        if v {
             self.regs.SR |= FLAG_CARRY;
         } else {
             self.regs.SR &= !FLAG_CARRY;
@@ -567,7 +568,7 @@ impl<'a> Cpu<'a> {
     }
 
     fn set_d_flag(&mut self, v: bool) {
-        if v == false {
+        if v {
             self.regs.SR |= FLAG_DEC;
         } else {
             self.regs.SR &= !FLAG_DEC;
