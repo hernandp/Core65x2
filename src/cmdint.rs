@@ -155,28 +155,41 @@ pub fn do_prompt() -> Command {
 pub fn exec(cmd: &Command, cpu: &mut cpu::Cpu) -> bool {
     match *cmd {
         Command::Go => loop {
-            if cpu.exec().brk_trap {
-                println!("?BREAK\n");
-                exec(&Command::Reg { reg: String::new(), val:0 }, cpu);
-                break;
+            match cpu.exec() {
+                cpu::InstrExecResult::Break => {
+                    println!("?Break\n");                    
+                    dump_registers(&cpu);
+                    break;
+                }
+                cpu::InstrExecResult::InvalidOpcode => {
+                    println!("?Invalid Opcode\n");                    
+                    dump_registers(&cpu);
+                    break;
+                }
+                cpu::InstrExecResult::Ok => {}
             }
+        },
+        Command::Step => {
+            disasm_at(&cpu, cpu.regs.PC);
+            match cpu.exec() {
+                cpu::InstrExecResult::Break => {
+                    println!("?Break\n");
+                }
+                cpu::InstrExecResult::InvalidOpcode => {
+                    println!("?Invalid Opcode\n");
+                }
+                cpu::InstrExecResult::Ok => {}
+            }
+            dump_registers(&cpu);
+
         },
         Command::ResetCPU => {
             cpu.reset();
-            exec(&Command::Reg { reg: String::new(), val:0 }, cpu);
+            dump_registers(&cpu);
         }
         Command::Reg { ref reg, val }=> {
             if reg == "" {
-                println!("PC      N V - B D I Z C    AC  XR  YR  SP");
-                println!("{:04X}    {rN} {rV}   {rB} {rD} {rI} {rZ} {rC}    {ac:02X}  {xr:02X}  {yr:02X}  {sp:02X}", regs = cpu.regs.PC, 
-                ac = cpu.regs.A, xr = cpu.regs.X, yr = cpu.regs.Y, sp = cpu.regs.SP,
-                rB = if cpu.is_flag_on(cpu::FLAG_BRK) { '1' } else { '.' },
-                rN = if cpu.is_flag_on(cpu::FLAG_SIGN) { '1' } else { '.' },
-                rV = if cpu.is_flag_on(cpu::FLAG_OF) { '1' } else { '.' },
-                rD = if cpu.is_flag_on(cpu::FLAG_DEC) { '1' } else { '.' },
-                rI = if cpu.is_flag_on(cpu::FLAG_INTR) { '1' } else { '.' },
-                rZ = if cpu.is_flag_on(cpu::FLAG_ZERO) { '1' } else { '.' },
-                rC = if cpu.is_flag_on(cpu::FLAG_CARRY) { '1' } else { '.' });
+                dump_registers(&cpu);                
             } 
             else {
                 match reg.as_ref() {
@@ -200,39 +213,7 @@ pub fn exec(cmd: &Command, cpu: &mut cpu::Cpu) -> bool {
             let mut current_addr = start_addr;
             let mut byte_count: u16 = 0;
             loop {  
-                let opcode_byte = cpu.mem.read_byte(current_addr);
-                let opcode_data = &OPCODE_TABLE[opcode_byte as usize];
-                let instr_len = cpu.get_instr_length(&opcode_data.addr_m);
-                
-                print!("{:04X}    {:02X} ", current_addr, opcode_byte);
-                for j in 1..3 {
-                    if j < instr_len  {
-                        print!("{:02X} ", cpu.mem.read_byte(current_addr + j as u16));
-                    } 
-                    else {
-                        print!("   ");
-                    }
-                }        
-
-                let op0 = cpu.mem.read_byte(current_addr + 1 as u16);
-                let op1 = cpu.mem.read_byte(current_addr + 2 as u16);
-
-                print!("    {} {}\n",opcode_data.name,
-                match (*opcode_data).addr_m {
-                    cpu::AddrMode::Acc =>  format!("A"),
-                    cpu::AddrMode::Imm  => format!("#${:02X}", op0),
-                    cpu::AddrMode::ZP   => format!("${:02X}", op0),
-                    cpu::AddrMode::ZPX  => format!("${:02X},X", op0),
-                    cpu::AddrMode::ZPY  => format!("${:02X},Y", op0),
-                    cpu::AddrMode::Abs  => format!("${:02X}{:02X}", op1, op0),
-                    cpu::AddrMode::AbsX  => format!("${:02X}{:02X},X", op1, op0),
-                    cpu::AddrMode::AbsY  => format!("${:02X}{:02X},Y", op1, op0),
-                    cpu::AddrMode::ZPIndX=> format!("(${:02X},X)", op0),
-                    cpu::AddrMode::ZPIndY=> format!("(${:02X}),Y", op0),
-                    cpu::AddrMode::Rel   => format!("${:02X}", op0),
-                    cpu::AddrMode::Ind   => format!("(${:04X}{:04X})", op1, op0),
-                    cpu::AddrMode::Impl   => format!("")                    
-                });
+                let instr_len = disasm_at(&cpu, current_addr);
                 current_addr += instr_len ;
                 byte_count += instr_len;
 
@@ -341,6 +322,57 @@ fn ask_choice(text: &str, options: &Vec<char>) -> char {
             }
         }
     }
+}
+
+fn disasm_at(cpu: &cpu::Cpu, addr: u16) -> u16 {
+    let opcode_byte = cpu.mem.read_byte(addr);
+    let opcode_data = &OPCODE_TABLE[opcode_byte as usize];
+    let instr_len = cpu.get_instr_length(&opcode_data.addr_m);
+
+    print!("{:04X}    {:02X} ", addr, opcode_byte);
+    for j in 1..3 {
+        if j < instr_len  {
+            print!("{:02X} ", cpu.mem.read_byte(addr + j as u16));
+        } 
+        else {
+            print!("   ");
+        }
+    }        
+
+    let op0 = cpu.mem.read_byte(addr + 1 as u16);
+    let op1 = cpu.mem.read_byte(addr + 2 as u16);
+
+    print!("    {} {}\n",opcode_data.name,
+    match (*opcode_data).addr_m {
+        cpu::AddrMode::Acc =>  format!("A"),
+        cpu::AddrMode::Imm  => format!("#${:02X}", op0),
+        cpu::AddrMode::ZP   => format!("${:02X}", op0),
+        cpu::AddrMode::ZPX  => format!("${:02X},X", op0),
+        cpu::AddrMode::ZPY  => format!("${:02X},Y", op0),
+        cpu::AddrMode::Abs  => format!("${:02X}{:02X}", op1, op0),
+        cpu::AddrMode::AbsX  => format!("${:02X}{:02X},X", op1, op0),
+        cpu::AddrMode::AbsY  => format!("${:02X}{:02X},Y", op1, op0),
+        cpu::AddrMode::ZPIndX=> format!("(${:02X},X)", op0),
+        cpu::AddrMode::ZPIndY=> format!("(${:02X}),Y", op0),
+        cpu::AddrMode::Rel   => format!("${:02X}", op0),
+        cpu::AddrMode::Ind   => format!("(${:04X}{:04X})", op1, op0),
+        cpu::AddrMode::Impl   => format!("")                    
+    });
+
+    instr_len
+}
+
+fn dump_registers(cpu: &cpu::Cpu) {
+    println!("PC      N V - B D I Z C    AC  XR  YR  SP");
+    println!("{:04X}    {rN} {rV}   {rB} {rD} {rI} {rZ} {rC}    {ac:02X}  {xr:02X}  {yr:02X}  {sp:02X}", regs = cpu.regs.PC, 
+    ac = cpu.regs.A, xr = cpu.regs.X, yr = cpu.regs.Y, sp = cpu.regs.SP,
+    rB = if cpu.is_flag_on(cpu::FLAG_BRK) { '1' } else { '.' },
+    rN = if cpu.is_flag_on(cpu::FLAG_SIGN) { '1' } else { '.' },
+    rV = if cpu.is_flag_on(cpu::FLAG_OF) { '1' } else { '.' },
+    rD = if cpu.is_flag_on(cpu::FLAG_DEC) { '1' } else { '.' },
+    rI = if cpu.is_flag_on(cpu::FLAG_INTR) { '1' } else { '.' },
+    rZ = if cpu.is_flag_on(cpu::FLAG_ZERO) { '1' } else { '.' },
+    rC = if cpu.is_flag_on(cpu::FLAG_CARRY) { '1' } else { '.' });
 }
 
 fn display_cmd_help(c: char) {
