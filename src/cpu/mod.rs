@@ -66,8 +66,10 @@ struct InstrCycleData {
     op1: u8,
 }
 
-pub struct InstrExecResult {
-    pub brk_trap: bool,
+pub enum InstrExecResult {
+    Ok,
+    Break,
+    InvalidOpcode,
 }
 
 struct InterruptTraps <'a>{
@@ -233,12 +235,12 @@ impl<'a> Cpu<'a> {
                 self.set_nz_flags(v);
             }
             Instr::TSX => {
-                let v = self.regs.X;
+                let v = self.regs.SP;
                 self.regs.X = v;
                 self.set_nz_flags(v);
             }
             Instr::TXS => {
-                let v = self.regs.SP;
+                let v = self.regs.X;
                 self.regs.SP = v;
                 self.set_nz_flags(v);
             }
@@ -280,19 +282,19 @@ impl<'a> Cpu<'a> {
             }
             Instr::CMP => {
                 let v = self.get_src_value(&addr_m);
-                let cmps: u16 = v as u16 - self.regs.A as u16;
+                let cmps: u16 = (v as u16).wrapping_sub(self.regs.A as u16);
                 self.set_c_flag(cmps < 0x100);
                 self.set_nz_flags(cmps as u8);
             }
             Instr::CPX => {
                 let v = self.get_src_value(&addr_m);
-                let cmps: u16 = v as u16 - self.regs.X as u16;
+                let cmps: u16 = (v as u16).wrapping_sub(self.regs.X as u16);
                 self.set_c_flag(cmps < 0x100);
                 self.set_nz_flags(cmps as u8);
             }
             Instr::CPY => {
                 let v = self.get_src_value(&addr_m);
-                let cmps: u16 = v as u16 - self.regs.Y as u16;
+                let cmps: u16 = (v as u16).wrapping_sub(self.regs.Y as u16);
                 self.set_c_flag(cmps < 0x100);
                 self.set_nz_flags(cmps as u8);
             }
@@ -471,12 +473,17 @@ impl<'a> Cpu<'a> {
             Instr::CLI => self.regs.SR &= !FLAG_INTR,
             Instr::CLD => self.regs.SR &= !FLAG_DEC,
             Instr::CLV => self.regs.SR &= !FLAG_OF,
-            Instr::INVALID => panic!("invalid Opcode"),
+            Instr::INVALID => return InstrExecResult::InvalidOpcode,
         }
 
         self.regs.PC += self.get_instr_length(&addr_m);
 
-        InstrExecResult { brk_trap: Instr::BRK == OPCODE_TABLE[self.icd.opcode as usize].ins }        
+        if Instr::BRK == OPCODE_TABLE[self.icd.opcode as usize].ins {
+             return InstrExecResult::Break
+        };
+
+        InstrExecResult::Ok
+
     }
 
     // Gets instruction length by addressing mode
