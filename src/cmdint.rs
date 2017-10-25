@@ -8,7 +8,7 @@ pub enum Command {
     Asm,
     Disasm { start_addr: u16, length: u16 },
     Enter,
-    Mem,
+    Mem  { start_addr: u16, length: u16 },
     Go,
     Load { filename: String, start_addr: u16 },
     Null,
@@ -68,7 +68,7 @@ pub fn do_prompt() -> Command {
                 let mut startaddr:u16 = 0;
                 let mut len:u16 = 32;
 
-                if argvec.len() == 1 {
+                if argvec.len() > 0 {
                     let v = u16::from_str_radix(argvec[0], 16);
                     if v.is_err() {
                         println!("?Invalid address: {}", argvec[0]);
@@ -113,7 +113,33 @@ pub fn do_prompt() -> Command {
                 }                         
                 return Command::Load{ filename: String::from(argvec[0]), start_addr: startaddr };
             },
-            Some('M') => return Command::Mem,
+            Some('M') =>  {
+                let mut startaddr:u16 = 0;
+                let mut len:u16 = 8 * 16;  // dump 16 lines
+
+                if argvec.len() > 0 {
+                    let v = u16::from_str_radix(argvec[0], 16);
+                    if v.is_err() {
+                        println!("?Invalid address: {}", argvec[0]);
+                        return Command::Null;
+                    }
+                    else {
+                        startaddr = v.unwrap();
+                    }
+                }
+
+                if argvec.len() == 2 {
+                    let v = u16::from_str_radix(argvec[1], 16);
+                    if v.is_err() {
+                        println!("?Invalid length: {}", argvec[1]);
+                        return Command::Null;
+                    }
+                    else {
+                        len = v.unwrap();
+                    }   
+                }           
+                return Command::Mem { start_addr: startaddr, length: len };
+            },
             Some('R') => {
 
                 if argvec.len() == 1 {
@@ -221,27 +247,43 @@ pub fn exec(cmd: &Command, cpu: &mut cpu::Cpu) -> bool {
                     break;
                 }
             }
-
         },
-        Command::Mem => {
-            let mut current_addr = cpu.regs.PC;
-            for _ in 0..8 {
-                print!("{:04X}  ", current_addr);
-                for i in 0..8 {                    
-                    print!("{:02X} ", cpu.mem.read_byte(current_addr + i));
+        Command::Mem { start_addr, length } => {
+            let mut cb = 0;
+            loop {
+                let current_addr = start_addr + cb;
+                                                
+                if cb % 8 == 0 {
+                    println!("");
+                    print!("{:04X}  ", current_addr);
                 }
-                for i in 0..8 {
-                    let cb = cpu.mem.read_byte(current_addr + i);
-                    if cb >= 32 {
-                        print!("{}", cpu.mem.read_byte(current_addr + i) as char);
-                    }
-                    else {
-                        print!(".");
-                    }
+                print!("{:02X} ", cpu.mem.read_byte(current_addr));
+                
+                cb += 1;
+
+                if cb == length || current_addr == 0xffff {
+                    println!("");
+                    break;
                 }
-                println!("");
-                current_addr += 8;
+
             }
+            // for _ in 0..length / 8 {
+            //     print!("{:04X}  ", current_addr);
+            //     for i in 0..8 {                    
+            //         print!("{:02X} ", cpu.mem.read_byte(current_addr + i));
+            //     }
+            //     for i in 0..8 {
+            //         let cb = cpu.mem.read_byte(current_addr + i);
+            //         if cb >= 0x20 && cb < 0x80 {
+            //             print!("{}", cpu.mem.read_byte(current_addr + i) as char);
+            //         }
+            //         else {
+            //             print!(".");
+            //         }
+            //     }
+            //     println!("");
+            //     current_addr += 8;
+            // }
         },
         Command::Load{ ref filename, start_addr } => {
             let binary_file = File::open(filename);
