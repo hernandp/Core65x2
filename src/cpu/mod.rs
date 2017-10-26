@@ -232,13 +232,13 @@ impl<'a> Cpu<'a> {
                 self.set_nz_flags(v);
             }
             Instr::TYA => {
-                let v = self.regs.A;
-                self.regs.Y = v;
+                let v = self.regs.Y;
+                self.regs.A = v;
                 self.set_nz_flags(v);
             }
             Instr::TAY => {
-                let v = self.regs.Y;
-                self.regs.A = v;
+                let v = self.regs.A;
+                self.regs.Y = v;
                 self.set_nz_flags(v);
             }
             Instr::TSX => {
