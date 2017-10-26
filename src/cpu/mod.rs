@@ -61,6 +61,7 @@ pub struct Regs {
 
 struct InstrCycleData {
     opcode: u8,
+    addr: u16,
     ea: u16,
     op0: u8,
     op1: u8,
@@ -92,7 +93,7 @@ macro_rules! branch_op {
         if $self.is_flag_on($flag) == $cond {
                     $self.clk_count += 1;
                     let prevpc = $self.regs.PC;
-                    $self.regs.PC += $self.icd.ea;
+                    $self.regs.PC.wrapping_add($self.icd.ea);
                     if prevpc & 0xFF00 != $self.regs.PC & 0xFF00 {
                         $self.clk_count += 1;
                     }
@@ -117,6 +118,7 @@ impl<'a> Cpu<'a> {
             clk_count: 0,
             mem: sysmem,
             icd: InstrCycleData {
+                addr: 0x0000,
                 opcode: 0x00,
                 ea: 0x0000,
                 op0: 0x00,
@@ -133,6 +135,11 @@ impl<'a> Cpu<'a> {
     // Do the RESET cycle for the emulated processor
     //
     pub fn reset(&mut self) {
+        self.regs.X = 0;
+        self.regs.Y = 0;
+        self.regs.A = 0;
+        self.regs.SR= 0b0010_0000;
+
         self.regs.PC = self.addr_from_2b(
             self.mem.read_byte(VECTOR_RESET),
             self.mem.read_byte(VECTOR_RESET + 1),
@@ -476,14 +483,11 @@ impl<'a> Cpu<'a> {
             Instr::INVALID => return InstrExecResult::InvalidOpcode,
         }
 
-        self.regs.PC += self.get_instr_length(&addr_m);
-
         if Instr::BRK == OPCODE_TABLE[self.icd.opcode as usize].ins {
              return InstrExecResult::Break
         };
 
         InstrExecResult::Ok
-
     }
 
     // Gets instruction length by addressing mode
@@ -503,22 +507,27 @@ impl<'a> Cpu<'a> {
     }
 
     //
-    // Fetch instruction
+    // Fetch instruction and increment PC
+    //
     fn fetch_instr(&mut self) {
         self.icd.opcode = self.mem.read_byte(self.regs.PC);
+        self.icd.addr = self.regs.PC;
+        self.regs.PC += 1;
     }
 
     //
-    // Fetch operands
+    // Fetch operands and increment PC
     //
     fn fetch_op(&mut self, addr_mode: &AddrMode)  {
         let num_operands = self.get_instr_length(addr_mode) - 1;
 
         if num_operands != 0 {
-            self.icd.op0 = self.mem.read_byte(self.regs.PC);
+            self.regs.PC = self.icd.addr + 2;
+            self.icd.op0 = self.mem.read_byte(self.icd.addr + 1);
         }
         if num_operands == 2 {
-            self.icd.op1 = self.mem.read_byte(self.regs.PC + 1);
+            self.regs.PC += 1;
+            self.icd.op1 = self.mem.read_byte(self.icd.addr + 2);
         }
     }
 
@@ -594,7 +603,7 @@ impl<'a> Cpu<'a> {
     fn calc_eff_addr(&mut self, addr_mode: &AddrMode) {
         match *addr_mode {
             AddrMode::Acc | AddrMode::Impl => {}
-            AddrMode::Imm => self.icd.ea = self.regs.PC + 1, /*we already fetched operands*/
+            AddrMode::Imm => self.icd.ea = self.icd.addr + 1,
             AddrMode::ZP => self.icd.ea = self.icd.op0 as u16,
             AddrMode::ZPX => self.icd.ea = self.icd.op0.wrapping_add(self.regs.X) as u16,
             AddrMode::ZPY => self.icd.ea = self.icd.op0.wrapping_add(self.regs.Y) as u16,
@@ -652,9 +661,9 @@ impl<'a> Cpu<'a> {
                signed relative-address */
             AddrMode::Rel => {
                 self.icd.ea = if self.icd.op0 & 0x80 == 0x80 {
-                    self.icd.op0 as u16
-                } else {
                     self.icd.op0 as u16 | 0xFF00
+                } else {
+                    self.icd.op0 as u16
                 }
             }
         }
