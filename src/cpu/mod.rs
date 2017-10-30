@@ -73,7 +73,7 @@ pub enum InstrExecResult {
     InvalidOpcode,
 }
 
-struct InterruptTraps <'a>{
+struct InterruptTraps<'a> {
     brk_trap: Option<&'a Fn()>,
 }
 
@@ -93,7 +93,7 @@ macro_rules! branch_op {
         if $self.is_flag_on($flag) == $cond {
                     $self.clk_count += 1;
                     let prevpc = $self.regs.PC;
-                    $self.regs.PC.wrapping_add($self.icd.ea);
+                    $self.regs.PC = $self.regs.PC.wrapping_add($self.icd.ea);
                     if prevpc & 0xFF00 != $self.regs.PC & 0xFF00 {
                         $self.clk_count += 1;
                     }
@@ -124,9 +124,7 @@ impl<'a> Cpu<'a> {
                 op0: 0x00,
                 op1: 0x00,
             },
-            traps: InterruptTraps {
-                brk_trap: None,
-            }
+            traps: InterruptTraps { brk_trap: None },
         }
     }
 
@@ -138,7 +136,7 @@ impl<'a> Cpu<'a> {
         self.regs.X = 0;
         self.regs.Y = 0;
         self.regs.A = 0;
-        self.regs.SR= 0b0010_0000;
+        self.regs.SR = 0b0010_0000;
 
         self.regs.PC = self.addr_from_2b(
             self.mem.read_byte(VECTOR_RESET),
@@ -175,9 +173,9 @@ impl<'a> Cpu<'a> {
         );
     }
 
-    // 
+    //
     // Set external trap function for interrupts
-    //   
+    //
     pub fn set_brk_trap(&mut self, f: &'a Fn()) {
         self.traps.brk_trap = Some(f);
     }
@@ -277,9 +275,9 @@ impl<'a> Cpu<'a> {
                 self.regs.Y = v;
             }
             Instr::INX => {
-                let v = self.regs.Y.wrapping_add(1);
+                let v = self.regs.X.wrapping_add(1);
                 self.set_nz_flags(v);
-                self.regs.Y = v;
+                self.regs.X = v;
             }
             Instr::JMP => {
                 self.regs.PC = self.icd.ea;
@@ -484,7 +482,7 @@ impl<'a> Cpu<'a> {
         }
 
         if Instr::BRK == OPCODE_TABLE[self.icd.opcode as usize].ins {
-             return InstrExecResult::Break
+            return InstrExecResult::Break;
         };
 
         InstrExecResult::Ok
@@ -518,7 +516,7 @@ impl<'a> Cpu<'a> {
     //
     // Fetch operands and increment PC
     //
-    fn fetch_op(&mut self, addr_mode: &AddrMode)  {
+    fn fetch_op(&mut self, addr_mode: &AddrMode) {
         let num_operands = self.get_instr_length(addr_mode) - 1;
 
         if num_operands != 0 {
