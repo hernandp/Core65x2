@@ -482,11 +482,12 @@ impl <'a> Monitor<'a> {
 
     fn dump_registers(&self) {
         println!("PC      N V - B D I Z C    AC  XR  YR  SP");
-        println!("{:04X}    {rN} {rV}   {rB} {rD} {rI} {rZ} {rC}    {ac:02X}  {xr:02X}  {yr:02X}  {sp:02X}", regs = self.cpu.regs.PC, 
+        println!("{:04X}    {rN} {rV} {rR} {rB} {rD} {rI} {rZ} {rC}    {ac:02X}  {xr:02X}  {yr:02X}  {sp:02X}", regs = self.cpu.regs.PC, 
         ac = self.cpu.regs.A, xr = self.cpu.regs.X, yr = self.cpu.regs.Y, sp = self.cpu.regs.SP,
         rB = if self.cpu.is_flag_on(cpu::FLAG_BRK) { '1' } else { '.' },
         rN = if self.cpu.is_flag_on(cpu::FLAG_SIGN) { '1' } else { '.' },
         rV = if self.cpu.is_flag_on(cpu::FLAG_OF) { '1' } else { '.' },
+        rR = if self.cpu.is_flag_on(cpu::FLAG_RSVD) { '1' } else { '.' },
         rD = if self.cpu.is_flag_on(cpu::FLAG_DEC) { '1' } else { '.' },
         rI = if self.cpu.is_flag_on(cpu::FLAG_INTR) { '1' } else { '.' },
         rZ = if self.cpu.is_flag_on(cpu::FLAG_ZERO) { '1' } else { '.' },
