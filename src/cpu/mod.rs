@@ -13,12 +13,13 @@ const STACK_ADDR_BASE: u16 = 0x0100;
 // Processor Status Register flags
 //
 pub const FLAG_CARRY: u8 = 0b0000_0001;
-pub const FLAG_ZERO: u8 = 0b0000_0010;
-pub const FLAG_INTR: u8 = 0b0000_0100;
-pub const FLAG_DEC: u8 = 0b0000_1000;
-pub const FLAG_BRK: u8 = 0b0001_0000;
-pub const FLAG_OF: u8 = 0b0100_0000;
-pub const FLAG_SIGN: u8 = 0b1000_0000;
+pub const FLAG_ZERO: u8  = 0b0000_0010;
+pub const FLAG_INTR: u8  = 0b0000_0100;
+pub const FLAG_DEC: u8   = 0b0000_1000;
+pub const FLAG_BRK: u8   = 0b0001_0000;
+pub const FLAG_RSVD: u8  = 0b0010_0000;
+pub const FLAG_OF: u8    = 0b0100_0000;
+pub const FLAG_SIGN: u8  = 0b1000_0000;
 
 //
 // Vector adresses
@@ -112,7 +113,7 @@ impl<'a> Cpu<'a> {
                 Y: 0,
                 SP: 0,
                 PC: 0,
-                SR: 0,
+                SR: FLAG_RSVD,
             },
             clk_count: 0,
             mem: sysmem,
@@ -357,10 +358,10 @@ impl<'a> Cpu<'a> {
             }
             Instr::PLP => {
                 let v = self.pop_stack();
-                self.regs.SR = v;
+                self.regs.SR = v | FLAG_RSVD;
             }
             Instr::PHP => {
-                let v = self.regs.SR;
+                let v = self.regs.SR | FLAG_BRK;
                 self.push_stack(v);
             }
             Instr::ADC => {
