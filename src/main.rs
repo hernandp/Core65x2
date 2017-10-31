@@ -1,8 +1,9 @@
 mod cpu;
 mod mem;
-mod cmdint;
+mod monitor;
 use cpu::Cpu;
 use mem::Memory;
+use monitor::Monitor;
 
 fn main() {
     println!("Rusty8  v0.001");
@@ -15,11 +16,13 @@ fn main() {
     let mut sys_mem = Memory::new();
     let mut sys_cpu = Cpu::new(&mut sys_mem);
     sys_cpu.reset();
-    cmdint::exec(&cmdint::Command::Reg{ reg: String::new(), val: 0 }, &mut sys_cpu);
+
+    let mut mon = Monitor::new(&mut sys_cpu);
+    mon.exec_command(&monitor::Command::Reg{ reg: String::new(), val: 0 });
 
     loop {
-        let cmd = cmdint::do_prompt();
-        if !cmdint::exec(&cmd, &mut sys_cpu) {
+        let cmd = mon.do_prompt();
+        if !mon.exec_command(&cmd) {
             break;
         }
     }  
