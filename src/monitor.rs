@@ -472,7 +472,7 @@ impl <'a> Monitor<'a> {
                 cpu::AddrMode::ZPIndX => format!("(${:02X},X)", op0),
                 cpu::AddrMode::ZPIndY => format!("(${:02X}),Y", op0),
                 cpu::AddrMode::Rel => format!("${:02X}", op0),
-                cpu::AddrMode::Ind => format!("(${:04X}{:04X})", op1, op0),
+                cpu::AddrMode::Ind => format!("(${:02X}{:02X})", op1, op0),
                 cpu::AddrMode::Impl => format!(""),
             }
         );
