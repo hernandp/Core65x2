@@ -7,8 +7,7 @@ use self::opc6502::OPCODE_TABLE;
 use self::opc6502::CLK_TABLE;
 use self::opc6502::Instr;
 
-const STACK_ADDR_BASE: u16 = 0x01FF;
-const STACK_ADDR_LIMIT: u16 = 0x0100;
+const STACK_ADDR_BASE: u16 = 0x0100;
 
 //
 // Processor Status Register flags
@@ -287,19 +286,19 @@ impl<'a> Cpu<'a> {
             }
             Instr::CMP => {
                 let v = self.get_src_value(&addr_m);
-                let cmps: u16 = (v as u16).wrapping_sub(self.regs.A as u16);
+                let cmps: u16 = (self.regs.A as u16).wrapping_sub(v as u16);
                 self.set_c_flag(cmps < 0x100);
                 self.set_nz_flags(cmps as u8);
             }
             Instr::CPX => {
                 let v = self.get_src_value(&addr_m);
-                let cmps: u16 = (v as u16).wrapping_sub(self.regs.X as u16);
+                let cmps: u16 = (self.regs.X as u16).wrapping_sub(v as u16);
                 self.set_c_flag(cmps < 0x100);
                 self.set_nz_flags(cmps as u8);
             }
             Instr::CPY => {
                 let v = self.get_src_value(&addr_m);
-                let cmps: u16 = (v as u16).wrapping_sub(self.regs.Y as u16);
+                let cmps: u16 = (self.regs.Y as u16).wrapping_sub(v as u16);
                 self.set_c_flag(cmps < 0x100);
                 self.set_nz_flags(cmps as u8);
             }
@@ -359,7 +358,6 @@ impl<'a> Cpu<'a> {
             Instr::PLP => {
                 let v = self.pop_stack();
                 self.regs.SR = v;
-                self.set_nz_flags(v);
             }
             Instr::PHP => {
                 let v = self.regs.SR;
@@ -681,13 +679,13 @@ impl<'a> Cpu<'a> {
 
 
     fn push_stack(&mut self, v: u8) {
-        self.mem.write_byte(self.regs.SP as u16, v);
+        self.mem.write_byte(STACK_ADDR_BASE + self.regs.SP as u16, v);
         self.regs.SP = self.regs.SP - 1;
     }
 
     fn pop_stack(&mut self) -> u8 {
         self.regs.SP = self.regs.SP + 1;
-        self.mem.read_byte(self.regs.SP as u16)
+        self.mem.read_byte(STACK_ADDR_BASE + self.regs.SP as u16)
     }
 
     fn get_src_value(&self, addr_mode: &AddrMode) -> u8 {
