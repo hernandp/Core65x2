@@ -86,14 +86,48 @@ impl <'a> Monitor<'a> {
                 Some('A') => return Command::Asm,
                 Some('B') => {
                     if argvec.len() == 0 {
-                                            
-                    } else if argvec.len() == 1 {
-                        if argvec[0] != "+" && argvec[0] != "-" {
+                        if self.breakpoints.is_empty() {
+                            println!("No breakpoints defined.");
+                        }
+                        else {
+                            for bp in self.breakpoints.iter() {
+                                println!("${:04X}", bp);
+                            }
+                        }
+                    } else if argvec.len() == 2 {
+                        if argvec[0] == "+" {
+                            let addr = u16::from_str_radix(argvec[1], 16);
+                            if addr.is_err() {
+                                println!("?Invalid address: {}", argvec[1]);
+                                return Command::Null;
+                            } else {
+                                let addr = addr.unwrap();
+                                self.breakpoints.insert(addr);
+                                println!("Breakpoint set at ${:04X}", addr);
+                            }
+                        } else if argvec[0] == "-" {
+                             let addr = u16::from_str_radix(argvec[1], 16);
+                             if addr.is_err() {
+                                println!("?Invalid address: {}", argvec[1]);
+                                return Command::Null;
+                            } else {
+                                let addr = addr.unwrap();
+                                if self.breakpoints.contains(&addr) {
+                                    self.breakpoints.remove(&addr);
+                                    println!("Breakpoint removed at ${:04X}", addr);
+                                } else {
+                                    println!("No breakpoint defined at address ${:04X}", addr);
+                                }
+                            }
+                            
+                        } else
+                        {
                             println!("?Invalid argument. Use + or - for setting/clearing breakpoints");
                             return Command::Null;
                         }                    
-                    } else if argvec.len() == 2 {
-
+                    } else {
+                        println!("?Invalid number of arguments");
+                        return Command::Null;
                     }
                 }
                 Some('D') => {
@@ -222,6 +256,11 @@ impl <'a> Monitor<'a> {
             Command::Go => {
                 let numi = 0;
                 loop {
+                    if self.breakpoints.contains(&self.cpu.regs.PC) {
+                        println!("?Breakpoint hit\n");
+                        self.dump_registers();
+                        break;
+                    }
                     match self.cpu.exec() {
                         cpu::InstrExecResult::Break => {
                             println!("?Break\n");
@@ -501,6 +540,5 @@ impl <'a> Monitor<'a> {
         println!("!MODEL    Set CPU model (6502, 65C02 or 65CE02)");
         println!("!CLOCK    Set CPU clock in MHz");
     }
-
 }
 
