@@ -573,9 +573,9 @@ impl<'a> Cpu<'a> {
 
     fn set_v_flag(&mut self, v: bool) {
         if v {
-            self.regs.SR |= FLAG_CARRY;
+            self.regs.SR |= FLAG_OF;
         } else {
-            self.regs.SR &= !FLAG_CARRY;
+            self.regs.SR &= !FLAG_OF;
         }
     }
 
