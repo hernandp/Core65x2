@@ -247,7 +247,6 @@ impl<'a> Cpu<'a> {
             Instr::TXS => {
                 let v = self.regs.X;
                 self.regs.SP = v;
-                self.set_nz_flags(v);
             }
             Instr::DEC => {
                 let v = self.get_src_value(&addr_m).wrapping_sub(1);
@@ -681,11 +680,11 @@ impl<'a> Cpu<'a> {
 
     fn push_stack(&mut self, v: u8) {
         self.mem.write_byte(STACK_ADDR_BASE + self.regs.SP as u16, v);
-        self.regs.SP = self.regs.SP - 1;
+        self.regs.SP = self.regs.SP.wrapping_sub(1);
     }
 
     fn pop_stack(&mut self) -> u8 {
-        self.regs.SP = self.regs.SP + 1;
+        self.regs.SP = self.regs.SP.wrapping_add(1);
         self.mem.read_byte(STACK_ADDR_BASE + self.regs.SP as u16)
     }
 
