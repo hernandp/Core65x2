@@ -337,8 +337,8 @@ impl<'a> Cpu<'a> {
                 self.push_sr();
                 self.set_i_flag(true);
                 self.regs.PC = self.addr_from_2b(
-                    self.mem.read_byte(VECTOR_RESET),
-                    self.mem.read_byte(VECTOR_RESET + 1),
+                    self.mem.read_byte(VECTOR_IRQ_BRK),
+                    self.mem.read_byte(VECTOR_IRQ_BRK + 1),
                 );
             }
             Instr::RTI => {
