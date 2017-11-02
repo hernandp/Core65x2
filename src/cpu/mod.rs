@@ -433,26 +433,18 @@ impl<'a> Cpu<'a> {
                 self.store_value(&addr_m, v);
             }
             Instr::ROR => {
-                let mut v = self.get_src_value(&addr_m) as u16;
-                if self.is_flag_on(FLAG_CARRY) {
-                    v = v | 0x100;
-                }
+                let v = self.get_src_value(&addr_m);
+                let res = (v >> 1) | (self.regs.SR & FLAG_CARRY) << 7;
                 self.set_c_flag(v & 1 == 1);
-                v = v >> 1;
-                self.set_nz_flags(v as u8);
-                self.store_value(&addr_m, v as u8);
+                self.set_nz_flags(res);
+                self.store_value(&addr_m, res);
             }
             Instr::ROL => {
-                let carry = if self.regs.SR & FLAG_CARRY == FLAG_CARRY {
-                    1
-                } else {
-                    0
-                };
-                let mut v = self.get_src_value(&addr_m) as u16;
-                v = (v << 1) | carry;
-                self.set_c_flag(v & 0xFF00 == 0xFF00);
-                self.set_nz_flags(v as u8);
-                self.store_value(&addr_m, v as u8);
+                let v = self.get_src_value(&addr_m);
+                let res = (v << 1) | (self.regs.SR & FLAG_CARRY);
+                self.set_c_flag(v & 0x80 == 0x80);
+                self.set_nz_flags(res);
+                self.store_value(&addr_m, res);
             }
             Instr::BIT => {
                 let v = self.get_src_value(&addr_m);
