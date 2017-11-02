@@ -63,7 +63,7 @@ pub const OPCODE_TABLE: &'static [Opcode; 256] = &[
             /* 0x1E */ define_opcode!(ASL,  AddrMode::AbsX   ),
             /* 0x1F */ Invalid_Opcode!(),
             /* 0x20 */ define_opcode!(JSR,  AddrMode::Abs    ),
-            /* 0x21 */ define_opcode!(PHP,  AddrMode::ZPIndX ),
+            /* 0x21 */ define_opcode!(AND,  AddrMode::ZPIndX ),
             /* 0x22 */ Invalid_Opcode!(),
             /* 0x23 */ Invalid_Opcode!(),
             /* 0x24 */ define_opcode!(BIT,  AddrMode::ZP     ),
