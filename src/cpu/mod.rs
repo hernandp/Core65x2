@@ -365,55 +365,48 @@ impl<'a> Cpu<'a> {
             }
             Instr::ADC => {
                 let v = self.get_src_value(&addr_m);
-                let carry = if self.regs.SR & FLAG_CARRY == FLAG_CARRY {
-                    1
-                } else {
-                    0
-                };
-                let mut add_res = self.regs.A as u16 + v as u16 + carry as u16;
+                let mut add_res = self.regs.A as u16 + v as u16 + (self.regs.SR & FLAG_CARRY) as u16;
 
-                if self.regs.SR & FLAG_DEC == FLAG_DEC {
-                    if (self.regs.A & 0xF) + (v & 0xF) + carry > 9 {
+                if self.is_flag_on(FLAG_DEC) {
+                    if (self.regs.A & 0xF) + (v & 0xF) + (self.regs.SR & FLAG_CARRY) > 9 {
                         add_res += 6;
                     }
                     if add_res > 0x99 {
                         add_res += 96;
                     }
-                    if add_res > 0x99 {
-                        self.set_c_flag(true);
-                    }
-                } else {
-                    if add_res > 0xFF {
-                        self.set_c_flag(true);
-                    }
+                    self.set_c_flag(add_res > 0x99);
+                } 
+                else {
+                    self.set_c_flag(add_res > 0xFF);
                 }
 
-                let of_check: bool =
-                    ((self.regs.A ^ v) & 0x80) != 0 && ((self.regs.A ^ v) & 0x80) != 0;
-                self.set_v_flag(!of_check);
+                let ac_sign = self.regs.A & 0x80;
+                let v_sign  = v & 0x80;
+                let res_sign = (add_res as u8) & 0x80;                
+                let of_check: bool = (ac_sign == v_sign) && (res_sign != ac_sign);
+                self.set_v_flag(of_check);
                 self.regs.A = add_res as u8;
                 self.set_nz_flags(add_res as u8);
             }
             Instr::SBC => {
                 let v = self.get_src_value(&addr_m);
-                let carry = if self.regs.SR & FLAG_CARRY == FLAG_CARRY {
-                    0
-                } else {
-                    1
-                };
-                let mut sub_res = self.regs.A as u16 - v as u16 - carry as u16;
+                let mut sub_res = self.regs.A as u16 + (v as u16 ^ 0x00FF) + (self.regs.SR & FLAG_CARRY) as u16;
 
-                if self.regs.SR & FLAG_DEC == FLAG_DEC {
-                    if (self.regs.A & 0xF) - carry > (v & 0xF) {
+                if self.is_flag_on(FLAG_DEC) {
+                    if (self.regs.A & 0xF) - (1 - (self.regs.SR & FLAG_CARRY)) < (v & 0xF) {
                         sub_res -= 6;
                     }
                     if sub_res > 0x99 {
                         sub_res -= 0x60;
                     }
                 }
-
-                let of_check: bool =
-                    ((self.regs.A ^ v) & 0x80) != 0 && ((self.regs.A ^ v) & 0x80) != 0;
+               
+                let ac_sign = self.regs.A & 0x80;
+                let v_sign  = v & 0x80;
+                let res_sign = (sub_res as u8) & 0x80;                
+                let of_check: bool = (ac_sign == 0 && v_sign == 0x80 && res_sign == 0x80) ||
+                                     (ac_sign == 0x80 && v_sign == 0 && res_sign == 0x00 );
+                self.set_c_flag(sub_res > 0xFF);  
                 self.set_v_flag(of_check);
                 self.regs.A = sub_res as u8;
                 self.set_nz_flags(sub_res as u8);
