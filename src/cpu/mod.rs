@@ -390,15 +390,21 @@ impl<'a> Cpu<'a> {
             }
             Instr::SBC => {
                 let v = self.get_src_value(&addr_m);
-                let mut sub_res = self.regs.A as u16 + (v as u16 ^ 0x00FF) + (self.regs.SR & FLAG_CARRY) as u16;
+                let cf = self.regs.SR & FLAG_CARRY;
+                let mut sub_res = self.regs.A as u16 + (v as u16 ^ 0x00FF) + cf as u16;
 
                 if self.is_flag_on(FLAG_DEC) {
-                    if (self.regs.A & 0xF) - (1 - (self.regs.SR & FLAG_CARRY)) < (v & 0xF) {
-                        sub_res -= 6;
+                    if self.regs.A & 0xF < (1-cf) + v & 0xF {
+                        sub_res -= 0x6;
                     }
-                    if sub_res > 0x99 {
+
+                    if self.regs.A < (1-cf) + v {
                         sub_res -= 0x60;
                     }
+                    self.set_c_flag(sub_res > 0x99);
+                } 
+                else {
+                    self.set_c_flag(sub_res > 0xFF);
                 }
                
                 let ac_sign = self.regs.A & 0x80;
@@ -406,9 +412,8 @@ impl<'a> Cpu<'a> {
                 let res_sign = (sub_res as u8) & 0x80;                
                 let of_check: bool = (ac_sign == 0 && v_sign == 0x80 && res_sign == 0x80) ||
                                      (ac_sign == 0x80 && v_sign == 0 && res_sign == 0x00 );
-                self.set_c_flag(sub_res > 0xFF);  
                 self.set_v_flag(of_check);
-                self.regs.A = sub_res as u8;
+                self.regs.A = sub_res as u8;                
                 self.set_nz_flags(sub_res as u8);
             }
             Instr::ASL => {
