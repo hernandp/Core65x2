@@ -1,5 +1,5 @@
-#[cfg(test)]
-mod tests;
+//#[cfg(test)]
+//mod tests;
 pub mod opc6502;
 
 use super::mem::Memory;

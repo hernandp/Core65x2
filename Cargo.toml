@@ -1,6 +1,6 @@
 [package]
-name = "rusty8"
-version = "0.1.0"
+name = "Core65X2"
+version = "0.1.5"
 authors = ["Hernán Di Pietro <hernan.di.pietro@gmail.com>"]
 
 [dependencies]
