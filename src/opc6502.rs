@@ -1,4 +1,4 @@
-use cpu::AddrMode;
+use AddrMode;
 
 #[derive(PartialEq)]
 pub enum Instr {

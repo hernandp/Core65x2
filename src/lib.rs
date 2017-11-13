@@ -2,7 +2,14 @@
 //mod tests;
 pub mod opc6502;
 
-use super::mem::Memory;
+// 
+// Implement this memory interface 
+//
+pub trait Memory {
+    fn read_byte(&self, addr: u16) -> u8;
+    fn write_byte(&mut self, addr: u16, v: u8);    
+}
+
 use self::opc6502::OPCODE_TABLE;
 use self::opc6502::CLK_TABLE;
 use self::opc6502::Instr;
@@ -51,12 +58,12 @@ pub enum AddrMode {
 
 // 6502 CPU registers
 pub struct Regs {
-    pub A: u8,
-    pub X: u8,
-    pub Y: u8,
-    pub PC: u16,
-    pub SP: u8,
-    pub SR: u8,
+    pub a: u8,
+    pub x: u8,
+    pub y: u8,
+    pub pc: u16,
+    pub sp: u8,
+    pub sr: u8,
 }
 
 struct InstrCycleData {
@@ -92,9 +99,9 @@ macro_rules! branch_op {
     ($self:ident, $flag:ident, $cond:expr) => {
         if $self.is_flag_on($flag) == $cond {
                     $self.clk_count += 1;
-                    let prevpc = $self.regs.PC;
-                    $self.regs.PC = $self.regs.PC.wrapping_add($self.icd.ea);
-                    if prevpc & 0xFF00 != $self.regs.PC & 0xFF00 {
+                    let prevpc = $self.regs.pc;
+                    $self.regs.pc = $self.regs.pc.wrapping_add($self.icd.ea);
+                    if prevpc & 0xFF00 != $self.regs.pc & 0xFF00 {
                         $self.clk_count += 1;
                     }
                 }
@@ -108,12 +115,12 @@ impl<'a> Cpu<'a> {
     pub fn new(sysmem: &'a mut Memory) -> Cpu<'a> {
         Cpu {
             regs: Regs {
-                A: 0,
-                X: 0,
-                Y: 0,
-                SP: 0,
-                PC: 0,
-                SR: FLAG_RSVD,
+                a: 0,
+                x: 0,
+                y: 0,
+                sp: 0,
+                pc: 0,
+                sr: FLAG_RSVD,
             },
             clk_count: 0,
             mem: sysmem,
@@ -133,16 +140,16 @@ impl<'a> Cpu<'a> {
     // Do the RESET cycle for the emulated processor
     //
     pub fn reset(&mut self) {
-        self.regs.X = 0;
-        self.regs.Y = 0;
-        self.regs.A = 0;
-        self.regs.SR = 0b0010_0000;
+        self.regs.x = 0;
+        self.regs.y = 0;
+        self.regs.a = 0;
+        self.regs.sr = 0b0010_0000;
 
-        self.regs.PC = self.addr_from_2b(
+        self.regs.pc = self.addr_from_2b(
             self.mem.read_byte(VECTOR_RESET),
             self.mem.read_byte(VECTOR_RESET + 1),
         );
-        self.regs.SP = 0xFD;
+        self.regs.sp = 0xFD;
         self.clk_count = 7;
     }
     //
@@ -153,7 +160,7 @@ impl<'a> Cpu<'a> {
         self.set_b_flag(false);
         self.push_sr();
         self.set_i_flag(true);
-        self.regs.PC = self.addr_from_2b(
+        self.regs.pc = self.addr_from_2b(
             self.mem.read_byte(VECTOR_NMI),
             self.mem.read_byte(VECTOR_NMI + 1),
         );
@@ -167,7 +174,7 @@ impl<'a> Cpu<'a> {
         self.set_b_flag(false);
         self.push_sr();
         self.set_i_flag(true);
-        self.regs.PC = self.addr_from_2b(
+        self.regs.pc = self.addr_from_2b(
             self.mem.read_byte(VECTOR_IRQ_BRK),
             self.mem.read_byte(VECTOR_IRQ_BRK + 1),
         );
@@ -204,49 +211,49 @@ impl<'a> Cpu<'a> {
             Instr::LDA => {
                 let v = self.get_src_value(&addr_m);
                 self.set_nz_flags(v);
-                self.regs.A = v;
+                self.regs.a = v;
             }
             Instr::LDX => {
                 let v = self.get_src_value(&addr_m);
                 self.set_nz_flags(v);
-                self.regs.X = v;
+                self.regs.x = v;
             }
             Instr::LDY => {
                 let v = self.get_src_value(&addr_m);
                 self.set_nz_flags(v);
-                self.regs.Y = v;
+                self.regs.y = v;
             }
-            Instr::STA => self.mem.write_byte(self.icd.ea, self.regs.A),
-            Instr::STX => self.mem.write_byte(self.icd.ea, self.regs.X),
-            Instr::STY => self.mem.write_byte(self.icd.ea, self.regs.Y),
+            Instr::STA => self.mem.write_byte(self.icd.ea, self.regs.a),
+            Instr::STX => self.mem.write_byte(self.icd.ea, self.regs.x),
+            Instr::STY => self.mem.write_byte(self.icd.ea, self.regs.y),
             Instr::TXA => {
-                let v = self.regs.X;
-                self.regs.A = v;
+                let v = self.regs.x;
+                self.regs.a = v;
                 self.set_nz_flags(v);
             }
             Instr::TAX => {
-                let v = self.regs.A;
-                self.regs.X = v;
+                let v = self.regs.a;
+                self.regs.x = v;
                 self.set_nz_flags(v);
             }
             Instr::TYA => {
-                let v = self.regs.Y;
-                self.regs.A = v;
+                let v = self.regs.y;
+                self.regs.a = v;
                 self.set_nz_flags(v);
             }
             Instr::TAY => {
-                let v = self.regs.A;
-                self.regs.Y = v;
+                let v = self.regs.a;
+                self.regs.y = v;
                 self.set_nz_flags(v);
             }
             Instr::TSX => {
-                let v = self.regs.SP;
-                self.regs.X = v;
+                let v = self.regs.sp;
+                self.regs.x = v;
                 self.set_nz_flags(v);
             }
             Instr::TXS => {
-                let v = self.regs.X;
-                self.regs.SP = v;
+                let v = self.regs.x;
+                self.regs.sp = v;
             }
             Instr::DEC => {
                 let v = self.get_src_value(&addr_m).wrapping_sub(1);
@@ -254,14 +261,14 @@ impl<'a> Cpu<'a> {
                 self.mem.write_byte(self.icd.ea, v);
             }
             Instr::DEX => {
-                let v = self.regs.X.wrapping_sub(1);
+                let v = self.regs.x.wrapping_sub(1);
                 self.set_nz_flags(v);
-                self.regs.X = v;
+                self.regs.x = v;
             }
             Instr::DEY => {
-                let v = self.regs.Y.wrapping_sub(1);
+                let v = self.regs.y.wrapping_sub(1);
                 self.set_nz_flags(v);
-                self.regs.Y = v;
+                self.regs.y = v;
             }
             Instr::INC => {
                 let v = self.get_src_value(&addr_m).wrapping_add(1);
@@ -269,106 +276,106 @@ impl<'a> Cpu<'a> {
                 self.mem.write_byte(self.icd.ea, v);
             }
             Instr::INY => {
-                let v = self.regs.Y.wrapping_add(1);
+                let v = self.regs.y.wrapping_add(1);
                 self.set_nz_flags(v);
-                self.regs.Y = v;
+                self.regs.y = v;
             }
             Instr::INX => {
-                let v = self.regs.X.wrapping_add(1);
+                let v = self.regs.x.wrapping_add(1);
                 self.set_nz_flags(v);
-                self.regs.X = v;
+                self.regs.x = v;
             }
             Instr::JMP => {
-                self.regs.PC = self.icd.ea;
+                self.regs.pc = self.icd.ea;
             }
             Instr::NOP => {
                 // do nothing...
             }
             Instr::CMP => {
                 let v = self.get_src_value(&addr_m);
-                let cmps: u16 = (self.regs.A as u16).wrapping_sub(v as u16);
+                let cmps: u16 = (self.regs.a as u16).wrapping_sub(v as u16);
                 self.set_c_flag(cmps < 0x100);
                 self.set_nz_flags(cmps as u8);
             }
             Instr::CPX => {
                 let v = self.get_src_value(&addr_m);
-                let cmps: u16 = (self.regs.X as u16).wrapping_sub(v as u16);
+                let cmps: u16 = (self.regs.x as u16).wrapping_sub(v as u16);
                 self.set_c_flag(cmps < 0x100);
                 self.set_nz_flags(cmps as u8);
             }
             Instr::CPY => {
                 let v = self.get_src_value(&addr_m);
-                let cmps: u16 = (self.regs.Y as u16).wrapping_sub(v as u16);
+                let cmps: u16 = (self.regs.y as u16).wrapping_sub(v as u16);
                 self.set_c_flag(cmps < 0x100);
                 self.set_nz_flags(cmps as u8);
             }
             Instr::AND => {
-                let v = self.get_src_value(&addr_m) & self.regs.A;
+                let v = self.get_src_value(&addr_m) & self.regs.a;
                 self.set_nz_flags(v);
-                self.regs.A = v;
+                self.regs.a = v;
             }
             Instr::EOR => {
-                let v = self.get_src_value(&addr_m) ^ self.regs.A;
+                let v = self.get_src_value(&addr_m) ^ self.regs.a;
                 self.set_nz_flags(v);
-                self.regs.A = v;
+                self.regs.a = v;
             }
             Instr::ORA => {
-                let v = self.get_src_value(&addr_m) | self.regs.A;
+                let v = self.get_src_value(&addr_m) | self.regs.a;
                 self.set_nz_flags(v);
-                self.regs.A = v;
+                self.regs.a = v;
             }
             Instr::JSR => {
-                let pch: u8 = ((self.regs.PC - 1) >> 8) as u8;
-                let pcl: u8 = ((self.regs.PC - 1) & 0xFF) as u8;
+                let pch: u8 = ((self.regs.pc - 1) >> 8) as u8;
+                let pcl: u8 = ((self.regs.pc - 1) & 0xFF) as u8;
                 self.push_stack(pch);
                 self.push_stack(pcl);
-                self.regs.PC = self.icd.ea;
+                self.regs.pc = self.icd.ea;
             }
             Instr::RTS => {
                 let pcl: u8 = self.pop_stack();
                 let pch: u8 = self.pop_stack();
-                self.regs.PC = (((pch as u16) << 8) | pcl as u16).wrapping_add(1);
+                self.regs.pc = (((pch as u16) << 8) | pcl as u16).wrapping_add(1);
             }
             Instr::BRK => {
-                self.regs.PC += 1;
+                self.regs.pc += 1;
                 self.push_pc();
                 self.set_b_flag(true);
                 self.push_sr();
                 self.set_i_flag(true);
-                self.regs.PC = self.addr_from_2b(
+                self.regs.pc = self.addr_from_2b(
                     self.mem.read_byte(VECTOR_IRQ_BRK),
                     self.mem.read_byte(VECTOR_IRQ_BRK + 1),
                 );
             }
             Instr::RTI => {
-                self.regs.SR = self.pop_stack();
+                self.regs.sr = self.pop_stack();
                 let retaddrl = self.pop_stack();
                 let retaddrh = self.pop_stack();
-                self.regs.PC = ((retaddrh as u16) << 8) | retaddrl as u16;
+                self.regs.pc = ((retaddrh as u16) << 8) | retaddrl as u16;
             }
             Instr::PLA => {
                 let v = self.pop_stack();
-                self.regs.A = v;
+                self.regs.a = v;
                 self.set_nz_flags(v);
             }
             Instr::PHA => {
-                let v = self.regs.A;
+                let v = self.regs.a;
                 self.push_stack(v);
             }
             Instr::PLP => {
                 let v = self.pop_stack();
-                self.regs.SR = v | FLAG_RSVD;
+                self.regs.sr = v | FLAG_RSVD;
             }
             Instr::PHP => {
-                let v = self.regs.SR | FLAG_BRK;
+                let v = self.regs.sr | FLAG_BRK;
                 self.push_stack(v);
             }
             Instr::ADC => {
                 let v = self.get_src_value(&addr_m);
-                let mut add_res = self.regs.A as u16 + v as u16 + (self.regs.SR & FLAG_CARRY) as u16;
+                let mut add_res = self.regs.a as u16 + v as u16 + (self.regs.sr & FLAG_CARRY) as u16;
 
                 if self.is_flag_on(FLAG_DEC) {
-                    if (self.regs.A & 0xF) + (v & 0xF) + (self.regs.SR & FLAG_CARRY) > 9 {
+                    if (self.regs.a & 0xF) + (v & 0xF) + (self.regs.sr & FLAG_CARRY) > 9 {
                         add_res += 6;
                     }
                     if add_res > 0x99 {
@@ -380,25 +387,25 @@ impl<'a> Cpu<'a> {
                     self.set_c_flag(add_res > 0xFF);
                 }
 
-                let ac_sign = self.regs.A & 0x80;
+                let ac_sign = self.regs.a & 0x80;
                 let v_sign  = v & 0x80;
                 let res_sign = (add_res as u8) & 0x80;                
                 let of_check: bool = (ac_sign == v_sign) && (res_sign != ac_sign);
                 self.set_v_flag(of_check);
-                self.regs.A = add_res as u8;
+                self.regs.a = add_res as u8;
                 self.set_nz_flags(add_res as u8);
             }
             Instr::SBC => {
                 let v = self.get_src_value(&addr_m);
-                let cf = self.regs.SR & FLAG_CARRY;
-                let mut sub_res = self.regs.A as u16 + (v as u16 ^ 0x00FF) + cf as u16;
+                let cf = self.regs.sr & FLAG_CARRY;
+                let mut sub_res = self.regs.a as u16 + (v as u16 ^ 0x00FF) + cf as u16;
 
                 if self.is_flag_on(FLAG_DEC) {
-                    if self.regs.A & 0xF < (1-cf) + v & 0xF {
+                    if self.regs.a & 0xF < (1-cf) + v & 0xF {
                         sub_res -= 0x6;
                     }
 
-                    if self.regs.A < (1-cf) + v {
+                    if self.regs.a < (1-cf) + v {
                         sub_res -= 0x60;
                     }
                     self.set_c_flag(sub_res > 0x99);
@@ -407,13 +414,13 @@ impl<'a> Cpu<'a> {
                     self.set_c_flag(sub_res > 0xFF);
                 }
                
-                let ac_sign = self.regs.A & 0x80;
+                let ac_sign = self.regs.a & 0x80;
                 let v_sign  = v & 0x80;
                 let res_sign = (sub_res as u8) & 0x80;                
                 let of_check: bool = (ac_sign == 0 && v_sign == 0x80 && res_sign == 0x80) ||
                                      (ac_sign == 0x80 && v_sign == 0 && res_sign == 0x00 );
                 self.set_v_flag(of_check);
-                self.regs.A = sub_res as u8;                
+                self.regs.a = sub_res as u8;                
                 self.set_nz_flags(sub_res as u8);
             }
             Instr::ASL => {
@@ -432,21 +439,21 @@ impl<'a> Cpu<'a> {
             }
             Instr::ROR => {
                 let v = self.get_src_value(&addr_m);
-                let res = (v >> 1) | (self.regs.SR & FLAG_CARRY) << 7;
+                let res = (v >> 1) | (self.regs.sr & FLAG_CARRY) << 7;
                 self.set_c_flag(v & 1 == 1);
                 self.set_nz_flags(res);
                 self.store_value(&addr_m, res);
             }
             Instr::ROL => {
                 let v = self.get_src_value(&addr_m);
-                let res = (v << 1) | (self.regs.SR & FLAG_CARRY);
+                let res = (v << 1) | (self.regs.sr & FLAG_CARRY);
                 self.set_c_flag(v & 0x80 == 0x80);
                 self.set_nz_flags(res);
                 self.store_value(&addr_m, res);
             }
             Instr::BIT => {
                 let v = self.get_src_value(&addr_m);
-                let tst = v & self.regs.A;
+                let tst = v & self.regs.a;
                 self.set_s_flag(v);
                 self.set_v_flag(v & 0x40 == 0x40);
                 self.set_z_flag(tst);
@@ -459,13 +466,13 @@ impl<'a> Cpu<'a> {
             Instr::BVS => branch_op!(self, FLAG_OF, true),
             Instr::BPL => branch_op!(self, FLAG_SIGN, false),
             Instr::BMI => branch_op!(self, FLAG_SIGN, true),
-            Instr::SEC => self.regs.SR |= FLAG_CARRY,
-            Instr::SEI => self.regs.SR |= FLAG_INTR,
-            Instr::SED => self.regs.SR |= FLAG_DEC,
-            Instr::CLC => self.regs.SR &= !FLAG_CARRY,
-            Instr::CLI => self.regs.SR &= !FLAG_INTR,
-            Instr::CLD => self.regs.SR &= !FLAG_DEC,
-            Instr::CLV => self.regs.SR &= !FLAG_OF,
+            Instr::SEC => self.regs.sr |= FLAG_CARRY,
+            Instr::SEI => self.regs.sr |= FLAG_INTR,
+            Instr::SED => self.regs.sr |= FLAG_DEC,
+            Instr::CLC => self.regs.sr &= !FLAG_CARRY,
+            Instr::CLI => self.regs.sr &= !FLAG_INTR,
+            Instr::CLD => self.regs.sr &= !FLAG_DEC,
+            Instr::CLV => self.regs.sr &= !FLAG_OF,
             Instr::INVALID => return InstrExecResult::InvalidOpcode,
         }
 
@@ -496,9 +503,9 @@ impl<'a> Cpu<'a> {
     // Fetch instruction and increment PC
     //
     fn fetch_instr(&mut self) {
-        self.icd.opcode = self.mem.read_byte(self.regs.PC);
-        self.icd.addr = self.regs.PC;
-        self.regs.PC += 1;
+        self.icd.opcode = self.mem.read_byte(self.regs.pc);
+        self.icd.addr = self.regs.pc;
+        self.regs.pc += 1;
     }
 
     //
@@ -508,74 +515,74 @@ impl<'a> Cpu<'a> {
         let num_operands = self.get_instr_length(addr_mode) - 1;
 
         if num_operands != 0 {
-            self.regs.PC = self.icd.addr + 2;
+            self.regs.pc = self.icd.addr + 2;
             self.icd.op0 = self.mem.read_byte(self.icd.addr + 1);
         }
         if num_operands == 2 {
-            self.regs.PC += 1;
+            self.regs.pc += 1;
             self.icd.op1 = self.mem.read_byte(self.icd.addr + 2);
         }
     }
 
     pub fn is_flag_on(&self, flag: u8) -> bool {
-        self.regs.SR & flag == flag
+        self.regs.sr & flag == flag
     }
 
     fn set_s_flag(&mut self, v: u8) {
         if v >= 0x80 {
-            self.regs.SR |= FLAG_SIGN;
+            self.regs.sr |= FLAG_SIGN;
         } else {
-            self.regs.SR &= !FLAG_SIGN;
+            self.regs.sr &= !FLAG_SIGN;
         }
     }
 
     fn set_z_flag(&mut self, v: u8) {
         if v == 0 {
-            self.regs.SR |= FLAG_ZERO;
+            self.regs.sr |= FLAG_ZERO;
         } else {
-            self.regs.SR &= !FLAG_ZERO;
+            self.regs.sr &= !FLAG_ZERO;
         }
     }
 
     fn set_c_flag(&mut self, v: bool) {
         if v {
-            self.regs.SR |= FLAG_CARRY;
+            self.regs.sr |= FLAG_CARRY;
         } else {
-            self.regs.SR &= !FLAG_CARRY;
+            self.regs.sr &= !FLAG_CARRY;
         }
     }
 
     fn set_b_flag(&mut self, v: bool) {
         if v {
-            self.regs.SR |= FLAG_BRK;
+            self.regs.sr |= FLAG_BRK;
         } else {
-            self.regs.SR &= !FLAG_BRK;
+            self.regs.sr &= !FLAG_BRK;
         }
     }
 
     fn set_i_flag(&mut self, v: bool) {
         if v {
-            self.regs.SR |= FLAG_INTR;
+            self.regs.sr |= FLAG_INTR;
         } else {
-            self.regs.SR &= !FLAG_INTR;
+            self.regs.sr &= !FLAG_INTR;
         }
     }
 
     fn set_v_flag(&mut self, v: bool) {
         if v {
-            self.regs.SR |= FLAG_OF;
+            self.regs.sr |= FLAG_OF;
         } else {
-            self.regs.SR &= !FLAG_OF;
+            self.regs.sr &= !FLAG_OF;
         }
     }
 
-    fn set_d_flag(&mut self, v: bool) {
-        if v {
-            self.regs.SR |= FLAG_DEC;
-        } else {
-            self.regs.SR &= !FLAG_DEC;
-        }
-    }
+    // fn set_d_flag(&mut self, v: bool) {
+    //     if v {
+    //         self.regs.sr |= FLAG_DEC;
+    //     } else {
+    //         self.regs.sr &= !FLAG_DEC;
+    //     }
+    // }
 
     fn set_nz_flags(&mut self, v: u8) {
         self.set_z_flag(v);
@@ -591,32 +598,32 @@ impl<'a> Cpu<'a> {
             AddrMode::Acc | AddrMode::Impl => {}
             AddrMode::Imm => self.icd.ea = self.icd.addr + 1,
             AddrMode::ZP => self.icd.ea = self.icd.op0 as u16,
-            AddrMode::ZPX => self.icd.ea = self.icd.op0.wrapping_add(self.regs.X) as u16,
-            AddrMode::ZPY => self.icd.ea = self.icd.op0.wrapping_add(self.regs.Y) as u16,
+            AddrMode::ZPX => self.icd.ea = self.icd.op0.wrapping_add(self.regs.x) as u16,
+            AddrMode::ZPY => self.icd.ea = self.icd.op0.wrapping_add(self.regs.y) as u16,
             AddrMode::Abs => self.icd.ea = self.addr_from_2b(self.icd.op0, self.icd.op1),
             AddrMode::AbsX => {
-                if (self.regs.X).overflowing_add(self.icd.op0).1 {
+                if (self.regs.x).overflowing_add(self.icd.op0).1 {
                     self.clk_count += 1;
                 };
 
-                self.icd.ea = (self.regs.X as u16)
+                self.icd.ea = (self.regs.x as u16)
                     .wrapping_add(self.addr_from_2b(self.icd.op0, self.icd.op1));
             }
 
             AddrMode::AbsY => {
-                if (self.regs.Y).overflowing_add(self.icd.op0).1 {
+                if (self.regs.y).overflowing_add(self.icd.op0).1 {
                     self.clk_count += 1;
                 };
-                self.icd.ea = (self.regs.Y as u16)
+                self.icd.ea = (self.regs.y as u16)
                     .wrapping_add(self.addr_from_2b(self.icd.op0, self.icd.op1));
             }
 
             AddrMode::ZPIndX => {
                 self.icd.ea = self.addr_from_2b(
                     self.mem
-                        .read_byte(self.regs.X.wrapping_add(self.icd.op0) as u16),
+                        .read_byte(self.regs.x.wrapping_add(self.icd.op0) as u16),
                     self.mem
-                        .read_byte(self.regs.X.wrapping_add(1).wrapping_add(self.icd.op0)
+                        .read_byte(self.regs.x.wrapping_add(1).wrapping_add(self.icd.op0)
                             as u16),
                 )
             }
@@ -628,13 +635,13 @@ impl<'a> Cpu<'a> {
                 );
 
                 if ((indirect_addr & 0xFF) as u8)
-                    .overflowing_add(self.regs.Y)
+                    .overflowing_add(self.regs.y)
                     .1
                 {
                     self.clk_count += 1;
                 }
 
-                self.icd.ea = indirect_addr.wrapping_add(self.regs.Y as u16);
+                self.icd.ea = indirect_addr.wrapping_add(self.regs.y as u16);
             }
             AddrMode::Ind => {
                 let indirect_addr = self.addr_from_2b(self.icd.op0, self.icd.op1);
@@ -656,38 +663,38 @@ impl<'a> Cpu<'a> {
     }
 
     fn push_pc(&mut self) {
-        let retaddrh: u8 = (self.regs.PC >> 8) as u8;
-        let retaddrl: u8 = (self.regs.PC & 0xFF) as u8;
+        let retaddrh: u8 = (self.regs.pc >> 8) as u8;
+        let retaddrl: u8 = (self.regs.pc & 0xFF) as u8;
         self.push_stack(retaddrh);
         self.push_stack(retaddrl);
     }
 
     fn push_sr(&mut self) {
-        let sr = self.regs.SR;
+        let sr = self.regs.sr;
         self.push_stack(sr);
     }
 
 
     fn push_stack(&mut self, v: u8) {
-        self.mem.write_byte(STACK_ADDR_BASE + self.regs.SP as u16, v);
-        self.regs.SP = self.regs.SP.wrapping_sub(1);
+        self.mem.write_byte(STACK_ADDR_BASE + self.regs.sp as u16, v);
+        self.regs.sp = self.regs.sp.wrapping_sub(1);
     }
 
     fn pop_stack(&mut self) -> u8 {
-        self.regs.SP = self.regs.SP.wrapping_add(1);
-        self.mem.read_byte(STACK_ADDR_BASE + self.regs.SP as u16)
+        self.regs.sp = self.regs.sp.wrapping_add(1);
+        self.mem.read_byte(STACK_ADDR_BASE + self.regs.sp as u16)
     }
 
     fn get_src_value(&self, addr_mode: &AddrMode) -> u8 {
         match *addr_mode {
-            AddrMode::Acc => self.regs.A,
+            AddrMode::Acc => self.regs.a,
             _ => self.mem.read_byte(self.icd.ea),
         }
     }
 
     fn store_value(&mut self, addr_mode: &AddrMode, v: u8) {
         match *addr_mode {
-            AddrMode::Acc => self.regs.A = v,
+            AddrMode::Acc => self.regs.a = v,
             _ => self.mem.write_byte(self.icd.ea, v),
         }
     }

@@ -1,5 +1,5 @@
 [package]
-name = "Core65X2"
+name = "core65x2"
 version = "0.1.5"
 authors = ["Hernán Di Pietro <hernan.di.pietro@gmail.com>"]
 
