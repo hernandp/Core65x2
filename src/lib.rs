@@ -82,6 +82,7 @@ pub enum InstrExecResult {
 
 struct InterruptTraps<'a> {
     brk_trap: Option<&'a Fn()>,
+    invop_trap: Option<&'a Fn()>,
 }
 
 pub struct Cpu<'a> {
@@ -131,7 +132,7 @@ impl<'a> Cpu<'a> {
                 op0: 0x00,
                 op1: 0x00,
             },
-            traps: InterruptTraps { brk_trap: None },
+            traps: InterruptTraps { brk_trap: None, invop_trap: None },
         }
     }
 
@@ -181,21 +182,10 @@ impl<'a> Cpu<'a> {
     }
 
     //
-    // Set external trap function for interrupts
-    //
-    pub fn set_brk_trap(&mut self, f: &'a Fn()) {
-        self.traps.brk_trap = Some(f);
-    }
-
-    pub fn clear_brk_trap(&mut self) {
-        self.traps.brk_trap = None;
-    }
-
-    //
     // Execute instruction at current program counter.
     // Returns elapsed clock cycles.
     //
-    pub fn exec(&mut self) -> InstrExecResult {
+    pub fn exec(&mut self) -> u64 {
         // Fetch instruction, operands and calculate effective address
         self.fetch_instr();
         let addr_m = &OPCODE_TABLE[self.icd.opcode as usize].addr_m;
@@ -346,6 +336,7 @@ impl<'a> Cpu<'a> {
                     self.mem.read_byte(VECTOR_IRQ_BRK),
                     self.mem.read_byte(VECTOR_IRQ_BRK + 1),
                 );
+                if self.traps.invop_trap.is_some() { self.traps.brk_trap.unwrap()() }
             }
             Instr::RTI => {
                 self.regs.sr = self.pop_stack();
@@ -473,14 +464,10 @@ impl<'a> Cpu<'a> {
             Instr::CLI => self.regs.sr &= !FLAG_INTR,
             Instr::CLD => self.regs.sr &= !FLAG_DEC,
             Instr::CLV => self.regs.sr &= !FLAG_OF,
-            Instr::INVALID => return InstrExecResult::InvalidOpcode,
+            Instr::INVALID => { if self.traps.invop_trap.is_some() { self.traps.invop_trap.unwrap()() } }
         }
 
-        if Instr::BRK == OPCODE_TABLE[self.icd.opcode as usize].ins {
-            return InstrExecResult::Break;
-        };
-
-        InstrExecResult::Ok
+        CLK_TABLE[self.icd.opcode as usize]
     }
 
     // Gets instruction length by addressing mode
