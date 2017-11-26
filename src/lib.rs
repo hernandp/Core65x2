@@ -74,23 +74,17 @@ struct InstrCycleData {
     op1: u8,
 }
 
-pub enum InstrExecResult {
-    Ok,
-    Break,
-    InvalidOpcode,
-}
-
-struct InterruptTraps<'a> {
-    brk_trap: Option<&'a Fn()>,
-    invop_trap: Option<&'a Fn()>,
+pub struct TrapHandlers<'a> {
+    pub brk_trap: Option<&'a Fn()>,
+    pub invop_trap: Option<&'a Fn()>,
 }
 
 pub struct Cpu<'a> {
     pub regs: Regs,
     pub mem: &'a mut Memory,
-    clk_count: u64,
+    pub clk_count: u64,
     icd: InstrCycleData,
-    traps: InterruptTraps<'a>,
+    pub traps: TrapHandlers<'a>,
 }
 
 
@@ -132,10 +126,21 @@ impl<'a> Cpu<'a> {
                 op0: 0x00,
                 op1: 0x00,
             },
-            traps: InterruptTraps { brk_trap: None, invop_trap: None },
+            traps: TrapHandlers { brk_trap: None, invop_trap: None },
         }
     }
 
+    fn null() {
+
+    }
+
+    pub fn set_brk_trap<F: Fn()>(&mut self, callback: &'a F) {
+        self.traps.brk_trap = Some(callback);
+    }
+
+    pub fn set_invop_trap<F: Fn()>(&mut self, callback: &'a F) {
+        self.traps.invop_trap = Some(callback);
+    }
 
     //
     // Do the RESET cycle for the emulated processor
@@ -336,7 +341,7 @@ impl<'a> Cpu<'a> {
                     self.mem.read_byte(VECTOR_IRQ_BRK),
                     self.mem.read_byte(VECTOR_IRQ_BRK + 1),
                 );
-                if self.traps.invop_trap.is_some() { self.traps.brk_trap.unwrap()() }
+                if self.traps.invop_trap.is_some() { (self.traps.brk_trap.unwrap())() }
             }
             Instr::RTI => {
                 self.regs.sr = self.pop_stack();
@@ -464,7 +469,9 @@ impl<'a> Cpu<'a> {
             Instr::CLI => self.regs.sr &= !FLAG_INTR,
             Instr::CLD => self.regs.sr &= !FLAG_DEC,
             Instr::CLV => self.regs.sr &= !FLAG_OF,
-            Instr::INVALID => { if self.traps.invop_trap.is_some() { self.traps.invop_trap.unwrap()() } }
+            Instr::INVALID => if self.traps.invop_trap.is_some() { 
+                    (self.traps.invop_trap.as_ref().unwrap())();
+                } 
         }
 
         CLK_TABLE[self.icd.opcode as usize]
