@@ -75,8 +75,8 @@ struct InstrCycleData {
 }
 
 pub struct TrapHandlers<'a> {
-    pub brk_trap: Option<&'a Fn()>,
-    pub invop_trap: Option<&'a Fn()>,
+    pub brk_trap: Box<'a + FnMut()>,
+    pub invop_trap: Box<'a + FnMut()>,
 }
 
 pub struct Cpu<'a> {
@@ -126,20 +126,16 @@ impl<'a> Cpu<'a> {
                 op0: 0x00,
                 op1: 0x00,
             },
-            traps: TrapHandlers { brk_trap: None, invop_trap: None },
+            traps: TrapHandlers { brk_trap: Box::new(||()), invop_trap: Box::new(||()) },
         }
     }
 
-    fn null() {
-
+    pub fn set_brk_trap<F: 'a + FnMut()>(&mut self, callback: F) {
+        self.traps.brk_trap = Box::new(callback);
     }
 
-    pub fn set_brk_trap<F: Fn()>(&mut self, callback: &'a F) {
-        self.traps.brk_trap = Some(callback);
-    }
-
-    pub fn set_invop_trap<F: Fn()>(&mut self, callback: &'a F) {
-        self.traps.invop_trap = Some(callback);
+    pub fn set_invop_trap<F: 'a + FnMut()>(&mut self, callback: F) {
+        self.traps.invop_trap = Box::new(callback);
     }
 
     //
@@ -341,7 +337,7 @@ impl<'a> Cpu<'a> {
                     self.mem.read_byte(VECTOR_IRQ_BRK),
                     self.mem.read_byte(VECTOR_IRQ_BRK + 1),
                 );
-                if self.traps.invop_trap.is_some() { (self.traps.brk_trap.unwrap())() }
+                (self.traps.brk_trap)();
             }
             Instr::RTI => {
                 self.regs.sr = self.pop_stack();
@@ -469,9 +465,7 @@ impl<'a> Cpu<'a> {
             Instr::CLI => self.regs.sr &= !FLAG_INTR,
             Instr::CLD => self.regs.sr &= !FLAG_DEC,
             Instr::CLV => self.regs.sr &= !FLAG_OF,
-            Instr::INVALID => if self.traps.invop_trap.is_some() { 
-                    (self.traps.invop_trap.as_ref().unwrap())();
-                } 
+            Instr::INVALID => (self.traps.invop_trap)()
         }
 
         CLK_TABLE[self.icd.opcode as usize]
